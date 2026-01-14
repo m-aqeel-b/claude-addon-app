@@ -1,0 +1,15 @@
+{
+  "addon_bundle": {
+    "title": "Add-Ons",
+    "subtitle": "Complete your purchase with these recommended items",
+    "free_gift": "Free Gift",
+    "free": "Free",
+    "off": "off",
+    "quantity": "Qty",
+    "add_to_cart": "Add to Cart",
+    "added_to_cart": "Added to cart!",
+    "save": "Save",
+    "select_variant": "Select option",
+    "subscription_only": "Subscription only"
+  }
+}

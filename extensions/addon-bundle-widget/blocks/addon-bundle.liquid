@@ -1,0 +1,169 @@
+{% comment %}
+  Add-On Bundle Widget
+  Displays configurable add-on products on product pages
+{% endcomment %}
+
+{% liquid
+  assign bundle_config = product.metafields['addon_bundle']['config'].value | default: nil
+  if bundle_config == blank
+    assign bundle_config = shop.metafields['addon_bundle']['global_config'].value | default: nil
+  endif
+%}
+
+{% if bundle_config != blank %}
+  {% assign config = bundle_config | parse_json %}
+
+  <div
+    class="addon-bundle-widget"
+    data-bundle-id="{{ config.bundleId }}"
+    data-product-id="{{ product.id }}"
+    style="
+      --addon-bg-color: {{ block.settings.background_color }};
+      --addon-font-color: {{ block.settings.font_color }};
+      --addon-button-color: {{ block.settings.button_color }};
+      --addon-button-text-color: {{ block.settings.button_text_color }};
+      --addon-badge-bg: {{ block.settings.badge_background }};
+      --addon-badge-color: {{ block.settings.badge_text_color }};
+      --addon-border-radius: {{ block.settings.border_radius }}px;
+      --addon-font-size: {{ block.settings.font_size }}px;
+    "
+  >
+    {% if block.settings.show_title %}
+      <h3 class="addon-bundle-widget__title">
+        {{ block.settings.title | default: config.title | default: 'Add-Ons' }}
+      </h3>
+    {% endif %}
+
+    {% if config.subtitle != blank %}
+      <p class="addon-bundle-widget__subtitle">{{ config.subtitle }}</p>
+    {% endif %}
+
+    {% comment %} Product Groups with Tabs {% endcomment %}
+    {% if config.productGroups != blank and config.productGroups.size > 1 %}
+      {% render 'addon-tabs', groups: config.productGroups, selection_mode: config.selectionMode %}
+    {% else %}
+      {% comment %} Regular Add-On List {% endcomment %}
+      <div class="addon-bundle-widget__list addon-bundle-widget__list--{{ block.settings.layout }}">
+        {% for addon in config.addOns %}
+          {% render 'addon-item',
+            addon: addon,
+            selection_mode: config.selectionMode,
+            image_size: block.settings.image_size,
+            show_quantity: addon.showQuantitySelector
+          %}
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Product Add-Ons",
+  "target": "section",
+  "enabled_on": {
+    "templates": ["product"]
+  },
+  "stylesheet": "addon-bundle.css",
+  "javascript": "addon-bundle.js",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "show_title",
+      "label": "Show title",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "title",
+      "label": "Widget title",
+      "default": "Add-Ons"
+    },
+    {
+      "type": "select",
+      "id": "layout",
+      "label": "Layout",
+      "options": [
+        { "value": "list", "label": "List" },
+        { "value": "grid", "label": "Grid" }
+      ],
+      "default": "list"
+    },
+    {
+      "type": "select",
+      "id": "image_size",
+      "label": "Image size",
+      "options": [
+        { "value": "small", "label": "Small (50px)" },
+        { "value": "medium", "label": "Medium (80px)" },
+        { "value": "large", "label": "Large (120px)" }
+      ],
+      "default": "medium"
+    },
+    {
+      "type": "header",
+      "content": "Colors"
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Background color",
+      "default": "#ffffff"
+    },
+    {
+      "type": "color",
+      "id": "font_color",
+      "label": "Font color",
+      "default": "#000000"
+    },
+    {
+      "type": "color",
+      "id": "button_color",
+      "label": "Button color",
+      "default": "#000000"
+    },
+    {
+      "type": "color",
+      "id": "button_text_color",
+      "label": "Button text color",
+      "default": "#ffffff"
+    },
+    {
+      "type": "color",
+      "id": "badge_background",
+      "label": "Discount badge background",
+      "default": "#e74c3c"
+    },
+    {
+      "type": "color",
+      "id": "badge_text_color",
+      "label": "Discount badge text",
+      "default": "#ffffff"
+    },
+    {
+      "type": "header",
+      "content": "Spacing"
+    },
+    {
+      "type": "range",
+      "id": "border_radius",
+      "min": 0,
+      "max": 20,
+      "step": 1,
+      "default": 8,
+      "unit": "px",
+      "label": "Border radius"
+    },
+    {
+      "type": "range",
+      "id": "font_size",
+      "min": 12,
+      "max": 18,
+      "step": 1,
+      "default": 14,
+      "unit": "px",
+      "label": "Font size"
+    }
+  ]
+}
+{% endschema %}

@@ -1,0 +1,11 @@
+api_version = "2026-04"
+
+uid = "3f68debf-c539-c5d4-ee20-e582345c41ecab2bed70"
+
+type = "theme_app_extension"
+name = "Add-On Bundle Widget"
+handle = "addon-bundle-widget"
+
+[[theme_extension.files]]
+page_type = "product"
+key = "addon-bundle"

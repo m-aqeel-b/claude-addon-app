@@ -1,0 +1,29 @@
+{% comment %}
+  Add-On Price Snippet
+  Renders discount badge based on discount type
+
+  Parameters:
+  - addon: Object containing add-on data with discountType and discountValue
+{% endcomment %}
+
+{% case addon.discountType %}
+  {% when 'PERCENTAGE' %}
+    <span class="addon-item__badge">
+      {{ addon.discountValue }}% {{ 'addon_bundle.off' | t }}
+    </span>
+
+  {% when 'FIXED_AMOUNT' %}
+    <span class="addon-item__badge">
+      {{ addon.discountValue | money }} {{ 'addon_bundle.off' | t }}
+    </span>
+
+  {% when 'FIXED_PRICE' %}
+    <span class="addon-item__badge addon-item__badge--price">
+      {{ addon.discountValue | money }}
+    </span>
+
+  {% when 'FREE_GIFT' %}
+    <span class="addon-item__badge addon-item__badge--free">
+      {{ 'addon_bundle.free' | t }}
+    </span>
+{% endcase %}

@@ -1,0 +1,361 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+// ============================================================================
+// ADD-ON BUNDLE ENUMS
+// ============================================================================
+
+/// Bundle publication status
+enum BundleStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+/// How customers can select add-ons
+enum SelectionMode {
+  SINGLE   // Radio buttons - one selection only
+  MULTIPLE // Checkboxes - multiple selections allowed
+}
+
+/// Product targeting strategy for when bundle appears
+enum TargetingType {
+  ALL_PRODUCTS      // Bundle appears on all products
+  SPECIFIC_PRODUCTS // Bundle appears on manually selected products
+  PRODUCT_GROUPS    // Bundle appears on tabbed product groups
+}
+
+/// Type of discount applied to add-on
+enum DiscountType {
+  PERCENTAGE   // e.g., 20% off
+  FIXED_AMOUNT // e.g., $5 off
+  FIXED_PRICE  // e.g., Set price to $10
+  FREE_GIFT    // 100% discount (free)
+}
+
+/// Widget layout display mode
+enum LayoutType {
+  GRID
+  LIST
+}
+
+/// Add-on image size in widget
+enum ImageSize {
+  SMALL
+  MEDIUM
+  LARGE
+}
+
+/// Discount label display style
+enum DiscountLabelStyle {
+  BADGE           // Colored badge/pill
+  HIGHLIGHTED_TEXT // Highlighted inline text
+}
+
+/// Border style for widget
+enum BorderStyle {
+  NONE
+  SOLID
+  DASHED
+  DOTTED
+}
+
+/// Discount combination behavior
+enum DiscountCombination {
+  COMBINE     // Can combine with other discounts
+  NOT_COMBINE // Cannot combine with other discounts
+}
+
+// ============================================================================
+// ADD-ON BUNDLE CORE MODELS
+// ============================================================================
+
+/// Main bundle configuration - the parent entity for add-on bundles
+model Bundle {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Multi-tenant identifier
+  shop String
+
+  // Basic configuration
+  title    String
+  subtitle String?
+  status   BundleStatus @default(DRAFT)
+
+  // Scheduling
+  startDate DateTime?
+  endDate   DateTime?
+
+  // Customer selection behavior
+  selectionMode SelectionMode @default(MULTIPLE)
+
+  // Product targeting
+  targetingType TargetingType @default(ALL_PRODUCTS)
+
+  // Global discount combination rules
+  combineWithProductDiscounts  DiscountCombination @default(COMBINE)
+  combineWithOrderDiscounts    DiscountCombination @default(COMBINE)
+  combineWithShippingDiscounts DiscountCombination @default(COMBINE)
+
+  // Shopify discount reference (GID from discountAutomaticAppCreate)
+  shopifyDiscountId String?
+
+  // Relationships
+  addOnSets     AddOnSet[]
+  targetedItems BundleTargetedItem[]
+  productGroups ProductGroup[]
+  widgetStyle   WidgetStyle?
+
+  // Indexes for common queries
+  @@index([shop])
+  @@index([shop, status])
+  @@index([shop, status, startDate, endDate])
+}
+
+/// Products or Collections that trigger this bundle to appear
+/// Used when targetingType is SPECIFIC_PRODUCTS
+model BundleTargetedItem {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  bundleId String
+  bundle   Bundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+
+  // Shopify resource reference (GID format)
+  // Can be: gid://shopify/Product/123 or gid://shopify/Collection/456
+  shopifyResourceId   String
+  shopifyResourceType String // "Product" or "Collection"
+
+  // Cached display data (denormalized for performance)
+  title    String?
+  imageUrl String?
+
+  @@unique([bundleId, shopifyResourceId])
+  @@index([bundleId])
+  @@index([shopifyResourceId])
+}
+
+/// Product groups for tabbed display
+/// Used when targetingType is PRODUCT_GROUPS
+model ProductGroup {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bundleId String
+  bundle   Bundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+
+  // Group configuration
+  title    String
+  position Int    @default(0)
+
+  // Items in this group
+  items ProductGroupItem[]
+
+  @@index([bundleId])
+  @@index([bundleId, position])
+}
+
+/// Individual items within a product group
+model ProductGroupItem {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  productGroupId String
+  productGroup   ProductGroup @relation(fields: [productGroupId], references: [id], onDelete: Cascade)
+
+  // Shopify resource reference (GID format)
+  shopifyResourceId   String
+  shopifyResourceType String // "Product" or "Collection"
+
+  // Cached display data
+  title    String?
+  imageUrl String?
+
+  position Int @default(0)
+
+  @@unique([productGroupId, shopifyResourceId])
+  @@index([productGroupId])
+  @@index([productGroupId, position])
+}
+
+/// Add-on set - a group of product variants customers can select from
+model AddOnSet {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bundleId String
+  bundle   Bundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+
+  // The product this add-on set is based on
+  // Shopify Product GID: gid://shopify/Product/123
+  shopifyProductId String
+
+  // Cached product data (denormalized for admin display)
+  productTitle    String?
+  productImageUrl String?
+
+  // Set configuration
+  title    String? // Optional override title
+  position Int     @default(0)
+
+  // Discount configuration
+  discountType  DiscountType @default(PERCENTAGE)
+  discountValue Decimal?     // Amount based on type (percentage, fixed amount, or fixed price)
+
+  // Discount label shown to customers
+  discountLabel String?
+
+  // Custom image (overrides product image) - Shopify Files URL
+  customImageUrl String?
+
+  // Selection behavior
+  isDefaultSelected Boolean @default(false) // Pre-selected on load (disabled if FREE_GIFT)
+
+  // Subscription eligibility
+  subscriptionOnly Boolean @default(false)
+
+  // Quantity options
+  showQuantitySelector Boolean @default(false)
+  maxQuantity          Int     @default(10)
+
+  // Selected variants (if empty, all variants are available)
+  selectedVariants AddOnSetVariant[]
+
+  @@index([bundleId])
+  @@index([bundleId, position])
+  @@index([shopifyProductId])
+}
+
+/// Specific variants available in an add-on set
+/// If no variants are specified, all product variants are available
+model AddOnSetVariant {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  addOnSetId String
+  addOnSet   AddOnSet @relation(fields: [addOnSetId], references: [id], onDelete: Cascade)
+
+  // Shopify Variant GID: gid://shopify/ProductVariant/456
+  shopifyVariantId String
+
+  // Cached variant data
+  variantTitle String?
+  variantSku   String?
+  variantPrice Decimal?
+
+  position Int @default(0)
+
+  @@unique([addOnSetId, shopifyVariantId])
+  @@index([addOnSetId])
+  @@index([shopifyVariantId])
+}
+
+/// Widget styling configuration for a bundle
+model WidgetStyle {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bundleId String @unique
+  bundle   Bundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+
+  // Colors (stored as hex strings, e.g., "#ffffff")
+  backgroundColor    String @default("#ffffff")
+  fontColor          String @default("#000000")
+  buttonColor        String @default("#000000")
+  buttonTextColor    String @default("#ffffff")
+  discountBadgeColor String @default("#e53935")
+  discountTextColor  String @default("#ffffff")
+
+  // Typography
+  fontSize         Int @default(14) // in pixels
+  titleFontSize    Int @default(18)
+  subtitleFontSize Int @default(14)
+
+  // Layout
+  layoutType   LayoutType  @default(LIST)
+  borderRadius Int         @default(8) // in pixels
+  borderStyle  BorderStyle @default(SOLID)
+  borderWidth  Int         @default(1) // in pixels
+  borderColor  String      @default("#e0e0e0")
+  padding      Int         @default(16) // in pixels
+  marginTop    Int         @default(16)
+  marginBottom Int         @default(16)
+
+  // Image settings
+  imageSize ImageSize @default(MEDIUM)
+
+  // Discount label style
+  discountLabelStyle DiscountLabelStyle @default(BADGE)
+
+  @@index([bundleId])
+}
+
+// ============================================================================
+// SHOP SETTINGS
+// ============================================================================
+
+/// Global app settings per shop
+model ShopSettings {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shop String @unique
+
+  // App-wide defaults
+  defaultSelectionMode SelectionMode @default(MULTIPLE)
+  defaultLayoutType    LayoutType    @default(LIST)
+  defaultImageSize     ImageSize     @default(MEDIUM)
+
+  // Default colors
+  defaultBackgroundColor String @default("#ffffff")
+  defaultFontColor       String @default("#000000")
+  defaultButtonColor     String @default("#000000")
+  defaultButtonTextColor String @default("#ffffff")
+
+  // Feature flags
+  analyticsEnabled Boolean @default(true)
+
+  // Installation tracking
+  installedAt   DateTime  @default(now())
+  uninstalledAt DateTime?
+
+  @@index([shop])
+}

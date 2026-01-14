@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree:*)",
+      "Bash(dir:*)",
+      "mcp__shopify-dev-mcp__learn_shopify_api",
+      "mcp__shopify-dev-mcp__search_docs_chunks",
+      "mcp__shopify-dev-mcp__introspect_graphql_schema",
+      "mcp__shopify-dev-mcp__fetch_full_docs",
+      "mcp__prisma-local__migrate-dev",
+      "Bash(shopify app generate extension --help:*)",
+      "Bash(npm install:*)",
+      "Bash(shopify app generate extension:*)",
+      "Bash(ls -la \"E:\\\\system\\\\shopify-apps\\\\new-apps\\\\claude-addon-bundle-app\\\\extensions\"\" 2>/dev/null || dir \"E:systemshopify-appsnew-appsclaude-addon-bundle-appextensions \")",
+      "mcp__shopify-dev-mcp__validate_graphql_codeblocks",
+      "Bash(npm run shopify:*)"
+    ]
+  }
+}

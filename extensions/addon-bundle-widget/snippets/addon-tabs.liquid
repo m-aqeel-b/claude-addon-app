@@ -1,0 +1,48 @@
+{% comment %}
+  Add-On Tabs Snippet
+  Renders product groups as tabs
+
+  Parameters:
+  - groups: Array of product groups
+  - selection_mode: 'SINGLE' or 'MULTIPLE'
+{% endcomment %}
+
+<div class="addon-tabs" role="tablist">
+  <div class="addon-tabs__nav">
+    {% for group in groups %}
+      <button
+        class="addon-tabs__tab{% if forloop.first %} addon-tabs__tab--active{% endif %}"
+        role="tab"
+        aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
+        aria-controls="addon-panel-{{ forloop.index }}"
+        id="addon-tab-{{ forloop.index }}"
+        data-tab-index="{{ forloop.index }}"
+      >
+        {{ group.title }}
+      </button>
+    {% endfor %}
+  </div>
+
+  <div class="addon-tabs__panels">
+    {% for group in groups %}
+      <div
+        class="addon-tabs__panel{% if forloop.first %} addon-tabs__panel--active{% endif %}"
+        role="tabpanel"
+        id="addon-panel-{{ forloop.index }}"
+        aria-labelledby="addon-tab-{{ forloop.index }}"
+        {% unless forloop.first %}hidden{% endunless %}
+      >
+        <div class="addon-bundle-widget__list">
+          {% for addon in group.addOns %}
+            {% render 'addon-item',
+              addon: addon,
+              selection_mode: selection_mode,
+              image_size: 'medium',
+              show_quantity: addon.showQuantitySelector
+            %}
+          {% endfor %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
