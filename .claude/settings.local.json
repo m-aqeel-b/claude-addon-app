@@ -13,7 +13,28 @@
       "Bash(shopify app generate extension:*)",
       "Bash(ls -la \"E:\\\\system\\\\shopify-apps\\\\new-apps\\\\claude-addon-bundle-app\\\\extensions\"\" 2>/dev/null || dir \"E:systemshopify-appsnew-appsclaude-addon-bundle-appextensions \")",
       "mcp__shopify-dev-mcp__validate_graphql_codeblocks",
-      "Bash(npm run shopify:*)"
+      "Bash(npm run shopify:*)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(npx prisma migrate:*)",
+      "Bash(npm run dev)",
+      "Bash(timeout /t 10 /nobreak)",
+      "Bash(ping:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(shopify app deploy)",
+      "Bash(shopify app deploy:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx shopify app deploy:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run deploy)",
+      "Bash(npm run deploy:*)"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "shopify-dev-mcp",
+    "Prisma-Local"
+  ]
 }

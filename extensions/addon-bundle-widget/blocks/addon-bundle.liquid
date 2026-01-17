@@ -4,14 +4,26 @@
 {% endcomment %}
 
 {% liquid
-  assign bundle_config = product.metafields['addon_bundle']['config'].value | default: nil
-  if bundle_config == blank
-    assign bundle_config = shop.metafields['addon_bundle']['global_config'].value | default: nil
+  comment
+    For JSON metafields, .value returns the parsed object directly
+    Try product-level first, then fall back to shop-level global config
+  endcomment
+
+  assign config = nil
+  assign config_source = 'none'
+
+  if product.metafields['addon-bundle']['config'] != blank
+    assign config = product.metafields['addon-bundle']['config'].value
+    assign config_source = 'product'
+  elsif shop.metafields['addon-bundle']['global_config'] != blank
+    assign config = shop.metafields['addon-bundle']['global_config'].value
+    assign config_source = 'shop'
   endif
 %}
 
-{% if bundle_config != blank %}
-  {% assign config = bundle_config | parse_json %}
+<!-- DEBUG: config_source={{ config_source }}, has_config={{ config | json | size }} -->
+
+{% if config != blank and config != empty %}
 
   <div
     class="addon-bundle-widget"

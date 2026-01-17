@@ -6,6 +6,9 @@ import type {
   DiscountCombination,
   AddOnSet,
   WidgetStyle,
+  BundleTargetedItem,
+  ProductGroup,
+  ProductGroupItem,
   Prisma,
 } from "@prisma/client";
 import prisma from "~/db.server";
@@ -14,9 +17,15 @@ import prisma from "~/db.server";
 // TYPES
 // ============================================================================
 
+export type ProductGroupWithItems = ProductGroup & {
+  items: ProductGroupItem[];
+};
+
 export type BundleWithRelations = Bundle & {
   addOnSets: AddOnSet[];
   widgetStyle: WidgetStyle | null;
+  targetedItems?: BundleTargetedItem[];
+  productGroups?: ProductGroupWithItems[];
   _count?: {
     addOnSets: number;
     targetedItems: number;

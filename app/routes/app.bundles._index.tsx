@@ -4,9 +4,12 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
-import { getBundles, getBundleStats, deleteBundle, duplicateBundle } from "../models/bundle.server";
+import { getBundles, getBundleStats, deleteBundle, duplicateBundle, getBundle } from "../models/bundle.server";
 import type { BundleWithRelations } from "../models/bundle.server";
 import type { BundleStatus } from "@prisma/client";
+import { clearShopMetafield, clearProductMetafields } from "../services/metafield.sync";
+import { getTargetedItems } from "../models/targeting.server";
+import { deactivateBundleDiscount } from "../services/discount.sync";
 
 interface LoaderData {
   bundles: BundleWithRelations[];
@@ -40,7 +43,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
 
   const formData = await request.formData();
@@ -48,7 +51,72 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const bundleId = formData.get("bundleId") as string;
 
   if (intent === "delete") {
+    console.log("[deleteBundle] Starting delete for bundle:", bundleId);
+
+    // Get the bundle first to check for discount
+    const bundleToDelete = await getBundle(bundleId, shop);
+    console.log("[deleteBundle] Bundle to delete:", bundleToDelete?.id, "targetingType:", bundleToDelete?.targetingType);
+
+    if (bundleToDelete) {
+      // Delete the Shopify discount if it exists
+      if (bundleToDelete.shopifyDiscountId) {
+        try {
+          console.log("[deleteBundle] Deactivating discount:", bundleToDelete.shopifyDiscountId);
+          const discountResult = await deactivateBundleDiscount(admin, shop, bundleToDelete);
+          console.log("[deleteBundle] Discount deactivation result:", discountResult);
+        } catch (error) {
+          console.error("[deleteBundle] Error deleting discount:", error);
+        }
+      }
+
+      // Clear the shop metafield if this was an ALL_PRODUCTS bundle
+      if (bundleToDelete.targetingType === "ALL_PRODUCTS") {
+        console.log("[deleteBundle] Clearing shop metafield for ALL_PRODUCTS bundle");
+        try {
+          const shopResponse = await admin.graphql(`query { shop { id } }`);
+          const shopResult = await shopResponse.json();
+          const shopGid = (shopResult.data?.shop as { id?: string })?.id;
+          console.log("[deleteBundle] Shop GID:", shopGid);
+
+          if (shopGid) {
+            const metafieldResult = await clearShopMetafield(admin, shopGid);
+            console.log("[deleteBundle] Metafield clear result:", metafieldResult);
+
+            if (!metafieldResult.success) {
+              console.error("[deleteBundle] Failed to clear metafield:", metafieldResult.error);
+            }
+          } else {
+            console.error("[deleteBundle] Could not get shop GID");
+          }
+        } catch (error) {
+          console.error("[deleteBundle] Error clearing shop metafield:", error);
+        }
+      }
+
+      // Clear product metafields if this was a SPECIFIC_PRODUCTS or PRODUCT_GROUPS bundle
+      if (bundleToDelete.targetingType === "SPECIFIC_PRODUCTS" || bundleToDelete.targetingType === "PRODUCT_GROUPS") {
+        console.log("[deleteBundle] Clearing product metafields for", bundleToDelete.targetingType, "bundle");
+        try {
+          // Get the targeted product IDs
+          const targetedItems = await getTargetedItems(bundleId);
+          const productIds = targetedItems
+            .filter(item => item.shopifyResourceType === "Product")
+            .map(item => item.shopifyResourceId);
+
+          console.log("[deleteBundle] Found", productIds.length, "product metafields to clear");
+
+          if (productIds.length > 0) {
+            await clearProductMetafields(admin, productIds);
+            console.log("[deleteBundle] Product metafields cleared");
+          }
+        } catch (error) {
+          console.error("[deleteBundle] Error clearing product metafields:", error);
+        }
+      }
+    }
+
     await deleteBundle(bundleId, shop);
+    console.log("[deleteBundle] Bundle deleted from database");
     return { success: true, action: "deleted" };
   }
 
@@ -70,16 +138,16 @@ function formatDate(date: Date | string | null): string {
   });
 }
 
-function getStatusBadgeVariant(status: BundleStatus): string {
+function getStatusBadgeVariant(status: BundleStatus): 'info' | 'success' | 'warning' | 'critical' {
   switch (status) {
     case "ACTIVE":
       return "success";
     case "DRAFT":
       return "info";
     case "ARCHIVED":
-      return "subdued";
+      return "warning";
     default:
-      return "default";
+      return "info";
   }
 }
 
@@ -205,7 +273,7 @@ export default function BundleList() {
           <s-text-field
             label="Search bundles"
             value={search}
-            onInput={(e: CustomEvent) => setSearch((e.target as HTMLInputElement).value)}
+            onInput={(e: Event) => setSearch((e.target as HTMLInputElement).value)}
             placeholder="Search by title..."
             style={{ flex: 1 }}
           />
@@ -216,7 +284,7 @@ export default function BundleList() {
       {/* Bundle List */}
       <s-section>
         {bundles.length === 0 ? (
-          <s-box padding="extraLarge" textAlign="center">
+          <s-box padding="600" textAlign="center">
             <s-stack direction="block" gap="base" align="center">
               <s-text variant="headingMd">No bundles found</s-text>
               <s-text color="subdued">
@@ -244,7 +312,7 @@ export default function BundleList() {
                   <s-stack direction="block" gap="tight" style={{ flex: 1 }}>
                     <s-stack direction="inline" gap="tight" align="center">
                       <s-text variant="headingMd">{bundle.title}</s-text>
-                      <s-badge variant={getStatusBadgeVariant(bundle.status)}>
+                      <s-badge tone={getStatusBadgeVariant(bundle.status)}>
                         {bundle.status}
                       </s-badge>
                     </s-stack>

@@ -7,7 +7,6 @@ embedded = true
 
 [build]
 automatically_update_urls_on_dev = true
-include_config_on_deploy = true
 
 [webhooks]
 api_version = "2026-04"
@@ -42,3 +41,6 @@ scopes = "write_products,read_products,write_discounts,read_discounts"
 
 [auth]
 redirect_urls = [ "https://example.com/api/auth" ]
+
+[access_scopes.metafields]
+allow = ["addon-bundle/config", "addon-bundle/global_config"]

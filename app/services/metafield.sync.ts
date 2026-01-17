@@ -5,13 +5,19 @@
  * - Theme App Extension (reads config to display widget)
  */
 
-import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
+// Admin API client type - matches Shopify's admin graphql client
+interface AdminGraphQLClient {
+  graphql: (query: string, options?: { variables?: Record<string, unknown> }) => Promise<{
+    json: () => Promise<{ data?: unknown; errors?: Array<{ message: string }> }>;
+  }>;
+}
 import type { BundleWithRelations } from "../models/bundle.server";
 import { getAddOnSets } from "../models/addOnSet.server";
 import { getWidgetStyle } from "../models/widgetStyle.server";
 
-// Metafield namespace for the app
-const METAFIELD_NAMESPACE = "$app:addon-bundle";
+// Metafield namespace for the app (defined in shopify.app.toml)
+// Note: Use "addon-bundle" not "$app:addon-bundle" - the $app prefix is automatic
+const METAFIELD_NAMESPACE = "addon-bundle";
 
 // Types for metafield configuration
 interface AddOnConfig {
@@ -179,13 +185,17 @@ function getDefaultMessage(discountType: string, value: unknown): string {
  * Called when bundle targeting includes specific products
  */
 export async function syncProductMetafields(
-  admin: AdminApiContext["admin"],
+  admin: AdminGraphQLClient,
   productIds: string[],
   widgetConfig: WidgetConfig
 ): Promise<void> {
-  if (productIds.length === 0) return;
+  if (productIds.length === 0) {
+    console.log("[Metafield Sync] No product IDs to sync");
+    return;
+  }
 
   const configJson = JSON.stringify(widgetConfig);
+  console.log("[Metafield Sync] Syncing to", productIds.length, "products");
 
   // Build metafield input for each product
   const metafields = productIds.map((productId) => ({
@@ -200,12 +210,66 @@ export async function syncProductMetafields(
   const chunks = chunkArray(metafields, 25);
 
   for (const chunk of chunks) {
-    await admin.graphql(
+    try {
+      const response = await admin.graphql(
+        `#graphql
+        mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
+          metafieldsSet(metafields: $metafields) {
+            metafields {
+              id
+              namespace
+              key
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }`,
+        {
+          variables: { metafields: chunk },
+        }
+      );
+
+      const result = await response.json();
+
+      if (result.errors) {
+        console.error("[Metafield Sync] GraphQL errors:", result.errors);
+      }
+
+      const data = result.data as { metafieldsSet?: { metafields?: Array<{ id: string }>; userErrors?: Array<{ field: string; message: string }> } };
+      if (data?.metafieldsSet?.userErrors?.length) {
+        console.error("[Metafield Sync] User errors:", data.metafieldsSet.userErrors);
+      } else {
+        console.log("[Metafield Sync] Successfully synced", data?.metafieldsSet?.metafields?.length, "product metafields");
+      }
+    } catch (error) {
+      console.error("[Metafield Sync] Error syncing product metafields:", error);
+    }
+  }
+}
+
+/**
+ * Sync bundle configuration to shop metafields for global bundles (ALL_PRODUCTS)
+ */
+export async function syncShopMetafields(
+  admin: AdminGraphQLClient,
+  shopGid: string,
+  widgetConfig: WidgetConfig
+): Promise<void> {
+  console.log("[Metafield Sync] Syncing shop metafield for shop:", shopGid);
+  console.log("[Metafield Sync] Widget config:", JSON.stringify(widgetConfig, null, 2));
+
+  try {
+    const response = await admin.graphql(
       `#graphql
       mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
         metafieldsSet(metafields: $metafields) {
           metafields {
             id
+            namespace
+            key
+            value
           }
           userErrors {
             field
@@ -214,149 +278,263 @@ export async function syncProductMetafields(
         }
       }`,
       {
-        variables: { metafields: chunk },
+        variables: {
+          metafields: [
+            {
+              ownerId: shopGid,
+              namespace: METAFIELD_NAMESPACE,
+              key: "global_config",
+              value: JSON.stringify(widgetConfig),
+              type: "json",
+            },
+          ],
+        },
       }
     );
-  }
-}
 
-/**
- * Sync bundle configuration to shop metafields for global bundles (ALL_PRODUCTS)
- */
-export async function syncShopMetafields(
-  admin: AdminApiContext["admin"],
-  shopGid: string,
-  widgetConfig: WidgetConfig
-): Promise<void> {
-  await admin.graphql(
-    `#graphql
-    mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
-      metafieldsSet(metafields: $metafields) {
-        metafields {
-          id
-        }
-        userErrors {
-          field
-          message
-        }
-      }
-    }`,
-    {
-      variables: {
-        metafields: [
-          {
-            ownerId: shopGid,
-            namespace: METAFIELD_NAMESPACE,
-            key: "global_config",
-            value: JSON.stringify(widgetConfig),
-            type: "json",
-          },
-        ],
-      },
+    const result = await response.json();
+
+    if (result.errors) {
+      console.error("[Metafield Sync] GraphQL errors:", result.errors);
+      return;
     }
-  );
+
+    const data = result.data as { metafieldsSet?: { metafields?: Array<{ id: string; namespace: string; key: string }>; userErrors?: Array<{ field: string; message: string }> } };
+    if (data?.metafieldsSet?.userErrors?.length) {
+      console.error("[Metafield Sync] User errors:", data.metafieldsSet.userErrors);
+    } else {
+      console.log("[Metafield Sync] Successfully synced shop metafield:", data?.metafieldsSet?.metafields);
+    }
+  } catch (error) {
+    console.error("[Metafield Sync] Error syncing shop metafield:", error);
+  }
 }
 
 /**
  * Clear metafields when bundle is deleted or deactivated
  */
 export async function clearProductMetafields(
-  admin: AdminApiContext["admin"],
+  admin: AdminGraphQLClient,
   productIds: string[]
 ): Promise<void> {
   if (productIds.length === 0) return;
 
-  // First, get the metafield IDs for these products
-  const metafieldIds: string[] = [];
+  console.log("[Metafield Sync] Clearing metafields for", productIds.length, "products");
 
-  for (const productId of productIds) {
-    const response = await admin.graphql(
-      `#graphql
-      query GetProductMetafield($productId: ID!) {
-        product(id: $productId) {
-          metafield(namespace: "${METAFIELD_NAMESPACE}", key: "config") {
-            id
+  // Delete metafields using ownerId + namespace + key (not by id)
+  // MetafieldIdentifierInput requires ownerId, namespace, key - NOT id
+  const metafieldsToDelete = productIds.map((productId) => ({
+    ownerId: productId,
+    namespace: METAFIELD_NAMESPACE,
+    key: "config",
+  }));
+
+  // Process in chunks of 25 (API limit)
+  const chunks = chunkArray(metafieldsToDelete, 25);
+
+  for (const chunk of chunks) {
+    try {
+      const response = await admin.graphql(
+        `#graphql
+        mutation MetafieldsDelete($metafields: [MetafieldIdentifierInput!]!) {
+          metafieldsDelete(metafields: $metafields) {
+            deletedMetafields {
+              ownerId
+              namespace
+              key
+            }
+            userErrors {
+              field
+              message
+            }
           }
+        }`,
+        {
+          variables: {
+            metafields: chunk,
+          },
         }
-      }`,
-      {
-        variables: { productId },
-      }
-    );
+      );
 
-    const data = await response.json();
-    if (data.data?.product?.metafield?.id) {
-      metafieldIds.push(data.data.product.metafield.id);
+      const result = await response.json();
+      const data = result.data as {
+        metafieldsDelete?: {
+          deletedMetafields?: Array<{ ownerId: string; namespace: string; key: string }>;
+          userErrors?: Array<{ field: string; message: string }>;
+        };
+      };
+
+      if (data?.metafieldsDelete?.userErrors?.length) {
+        console.error("[Metafield Sync] User errors:", data.metafieldsDelete.userErrors);
+      } else {
+        console.log("[Metafield Sync] Cleared", data?.metafieldsDelete?.deletedMetafields?.length || 0, "product metafields");
+      }
+    } catch (error) {
+      console.error("[Metafield Sync] Error clearing product metafields:", error);
     }
   }
-
-  if (metafieldIds.length === 0) return;
-
-  // Delete the metafields
-  await admin.graphql(
-    `#graphql
-    mutation MetafieldsDelete($metafields: [MetafieldIdentifierInput!]!) {
-      metafieldsDelete(metafields: $metafields) {
-        deletedMetafields {
-          ownerId
-        }
-        userErrors {
-          field
-          message
-        }
-      }
-    }`,
-    {
-      variables: {
-        metafields: metafieldIds.map((id) => ({ id })),
-      },
-    }
-  );
 }
 
 /**
  * Clear global shop metafield
+ * Uses direct deletion by ownerId + namespace + key (more reliable than ID-based)
  */
 export async function clearShopMetafield(
-  admin: AdminApiContext["admin"],
+  admin: AdminGraphQLClient,
   shopGid: string
-): Promise<void> {
-  const response = await admin.graphql(
-    `#graphql
-    query GetShopMetafield($shopId: ID!) {
-      shop {
-        metafield(namespace: "${METAFIELD_NAMESPACE}", key: "global_config") {
-          id
-        }
-      }
-    }`,
-    {
-      variables: { shopId: shopGid },
-    }
-  );
+): Promise<{ success: boolean; error?: string }> {
+  console.log("[clearShopMetafield] Starting - shopGid:", shopGid);
 
-  const data = await response.json();
-  if (!data.data?.shop?.metafield?.id) return;
+  // Try multiple namespace variations
+  const namespacesToTry = [
+    METAFIELD_NAMESPACE,           // "addon-bundle"
+    `$app:${METAFIELD_NAMESPACE}`, // "$app:addon-bundle"
+  ];
 
-  await admin.graphql(
-    `#graphql
-    mutation MetafieldsDelete($metafields: [MetafieldIdentifierInput!]!) {
-      metafieldsDelete(metafields: $metafields) {
-        deletedMetafields {
-          ownerId
+  const keysToTry = ["global_config", "config"];
+
+  let deletedCount = 0;
+  let lastError: string | undefined;
+
+  // First, list ALL metafields on the shop to see what's actually there
+  try {
+    const listResponse = await admin.graphql(
+      `#graphql
+      query ListAllShopMetafields {
+        shop {
+          metafields(first: 100) {
+            nodes {
+              id
+              namespace
+              key
+            }
+          }
         }
-        userErrors {
-          field
-          message
+      }`
+    );
+    const listResult = await listResponse.json();
+    const allMetafields = (listResult.data as { shop?: { metafields?: { nodes?: Array<{ id: string; namespace: string; key: string }> } } })?.shop?.metafields?.nodes || [];
+    console.log("[clearShopMetafield] All shop metafields:", JSON.stringify(allMetafields.map(m => `${m.namespace}:${m.key}`)));
+
+    // Find and delete any addon-bundle related metafields
+    const toDelete = allMetafields.filter(mf =>
+      mf.namespace.includes('addon') ||
+      mf.namespace.includes('bundle') ||
+      mf.key.includes('addon') ||
+      mf.key.includes('bundle') ||
+      mf.key === 'global_config'
+    );
+
+    console.log("[clearShopMetafield] Metafields to delete:", JSON.stringify(toDelete));
+
+    if (toDelete.length > 0) {
+      const deleteResponse = await admin.graphql(
+        `#graphql
+        mutation MetafieldsDelete($metafields: [MetafieldIdentifierInput!]!) {
+          metafieldsDelete(metafields: $metafields) {
+            deletedMetafields {
+              ownerId
+              namespace
+              key
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }`,
+        {
+          variables: {
+            metafields: toDelete.map(mf => ({
+              ownerId: shopGid,
+              namespace: mf.namespace,
+              key: mf.key,
+            })),
+          },
         }
+      );
+
+      const deleteResult = await deleteResponse.json();
+      console.log("[clearShopMetafield] Delete result:", JSON.stringify(deleteResult, null, 2));
+
+      const deleteData = deleteResult.data as {
+        metafieldsDelete?: {
+          deletedMetafields?: Array<{ ownerId: string; namespace: string; key: string }>;
+          userErrors?: Array<{ field: string; message: string }>;
+        };
+      };
+
+      if (deleteData?.metafieldsDelete?.userErrors?.length) {
+        lastError = deleteData.metafieldsDelete.userErrors.map(e => e.message).join(", ");
+        console.error("[clearShopMetafield] User errors:", lastError);
+      } else {
+        deletedCount = deleteData?.metafieldsDelete?.deletedMetafields?.length || 0;
+        console.log("[clearShopMetafield] Deleted", deletedCount, "metafields");
       }
-    }`,
-    {
-      variables: {
-        metafields: [{ id: data.data.shop.metafield.id }],
-      },
     }
-  );
+  } catch (error) {
+    console.error("[clearShopMetafield] Error listing/deleting metafields:", error);
+    lastError = error instanceof Error ? error.message : "Unknown error";
+  }
+
+  // Also try direct deletion by ownerId + namespace + key as fallback
+  for (const namespace of namespacesToTry) {
+    for (const key of keysToTry) {
+      try {
+        console.log("[clearShopMetafield] Trying direct delete:", shopGid, namespace, key);
+
+        const deleteResponse = await admin.graphql(
+          `#graphql
+          mutation MetafieldsDelete($metafields: [MetafieldIdentifierInput!]!) {
+            metafieldsDelete(metafields: $metafields) {
+              deletedMetafields {
+                ownerId
+                namespace
+                key
+              }
+              userErrors {
+                field
+                message
+              }
+            }
+          }`,
+          {
+            variables: {
+              metafields: [{
+                ownerId: shopGid,
+                namespace: namespace,
+                key: key,
+              }],
+            },
+          }
+        );
+
+        const deleteResult = await deleteResponse.json();
+        const deleteData = deleteResult.data as {
+          metafieldsDelete?: {
+            deletedMetafields?: Array<{ ownerId: string; namespace: string; key: string }>;
+            userErrors?: Array<{ field: string; message: string }>;
+          };
+        };
+
+        if (deleteData?.metafieldsDelete?.deletedMetafields?.length) {
+          console.log("[clearShopMetafield] Direct delete succeeded for:", namespace, key);
+          deletedCount += deleteData.metafieldsDelete.deletedMetafields.length;
+        }
+      } catch (error) {
+        // Ignore errors for direct delete attempts
+        console.log("[clearShopMetafield] Direct delete failed for", namespace, key, ":", error);
+      }
+    }
+  }
+
+  console.log("[clearShopMetafield] Total deleted:", deletedCount);
+
+  if (deletedCount > 0 || !lastError) {
+    return { success: true };
+  }
+
+  return { success: false, error: lastError };
 }
 
 /**

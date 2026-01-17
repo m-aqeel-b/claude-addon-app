@@ -8,6 +8,9 @@ query CartInput {
           amount
         }
       }
+      addonBundleId: attribute(key: "_addon_bundle_id") {
+        value
+      }
       merchandise {
         __typename
         ... on ProductVariant {
@@ -25,9 +28,9 @@ query CartInput {
     }
   }
   discount {
-    discountClasses
     metafield(namespace: "$app:addon-bundle", key: "config") {
-      jsonValue
+      value
     }
+    discountClasses
   }
 }

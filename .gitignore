@@ -12,6 +12,8 @@ database.sqlite
 
 .env
 .env.*
+nul
+**/nul
 
 
 

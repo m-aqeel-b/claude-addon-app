@@ -27,9 +27,35 @@
   if addon.isDefaultSelected
     assign checked_attr = 'checked'
   endif
+
+  assign variant_id = ''
+
+  for variant in addon.selectedVariants limit:1
+    if variant.shopifyVariantId != blank
+      assign variant_id = variant.shopifyVariantId
+      break
+    endif
+  endfor
+
+  if variant_id == blank and addon.selectedVariants[0].shopifyVariantId != blank
+    assign variant_id = addon.selectedVariants[0].shopifyVariantId
+  endif
+
+  if variant_id == blank and addon.selectedVariants.first.shopifyVariantId != blank
+    assign variant_id = addon.selectedVariants.first.shopifyVariantId
+  endif
+
+  if variant_id == blank and addon.variantId != blank
+    assign variant_id = addon.variantId
+  endif
+
+  if variant_id == blank and addon.shopifyVariantId != blank
+    assign variant_id = addon.shopifyVariantId
+  endif
 %}
 
-<div class="addon-item" data-addon-id="{{ addon.addOnId }}" data-variant-id="{{ addon.targetVariantIds | first }}">
+<!-- Debug: variant_id={{ variant_id }}, selectedVariants={{ addon.selectedVariants | json }}, size={{ addon.selectedVariants.size }} -->
+<div class="addon-item" data-addon-id="{{ addon.addOnId }}" data-variant-id="{{ variant_id }}">
   <label class="addon-item__label">
     <input
       type="{{ input_type }}"
