@@ -318,6 +318,9 @@ export default function NewBundle() {
   // Style modal state
   const [isStyleModalOpen, setIsStyleModalOpen] = useState(false);
 
+  // Targeted item delete confirmation state
+  const [targetedItemToDelete, setTargetedItemToDelete] = useState<LocalTargetedItem | null>(null);
+
   // Refs
   const addProductButtonRef = useRef<HTMLElement>(null);
   const stylesButtonRef = useRef<HTMLElement>(null);
@@ -620,20 +623,22 @@ export default function NewBundle() {
           {/* Specific products/collections UI */}
           {form.targetingType === "SPECIFIC_PRODUCTS" && (
             <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
-              <s-stack direction="block" gap="base">
-                <s-text variant="headingSm">Selected products and collections</s-text>
-                <s-text color="subdued">
+              <s-stack direction="block" gap="tight">
+                {/* Header row with title and buttons */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <s-text variant="headingSm">Selected products and collections</s-text>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <s-button variant="secondary" onClick={() => openTargetedResourcePicker("product")}>
+                      Add product
+                    </s-button>
+                    <s-button variant="secondary" onClick={() => openTargetedResourcePicker("collection")}>
+                      Add collection
+                    </s-button>
+                  </div>
+                </div>
+                <s-text color="subdued" variant="bodySm">
                   Add-ons will only appear on these specific products or products in these collections.
                 </s-text>
-
-                <s-stack direction="inline" gap="tight">
-                  <s-button variant="secondary" onClick={() => openTargetedResourcePicker("product")}>
-                    Add products
-                  </s-button>
-                  <s-button variant="secondary" onClick={() => openTargetedResourcePicker("collection")}>
-                    Add collections
-                  </s-button>
-                </s-stack>
 
                 {targetedItems.length === 0 ? (
                   <s-text color="subdued" variant="bodySm">
@@ -642,16 +647,53 @@ export default function NewBundle() {
                 ) : (
                   <s-stack direction="block" gap="tight">
                     {targetedItems.map((item) => (
-                      <s-box key={item.id} padding="tight" borderWidth="base" borderRadius="base">
-                        <s-stack direction="inline" gap="tight" align="center">
-                          <s-badge tone={item.shopifyResourceType === "Product" ? "info" : "success"}>
-                            {item.shopifyResourceType}
-                          </s-badge>
-                          <s-text style={{ flex: 1 }}>{item.title}</s-text>
-                          <s-button variant="tertiary" tone="critical" onClick={() => removeTargetedItem(item.id)}>
+                      <s-box key={item.id} padding="base" borderWidth="base" borderRadius="base" background="default">
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px", width: "100%" }}>
+                          {/* Image */}
+                          {item.imageUrl ? (
+                            <img
+                              src={item.imageUrl}
+                              alt={item.title}
+                              style={{
+                                width: "48px",
+                                height: "48px",
+                                objectFit: "cover",
+                                borderRadius: "4px",
+                                border: "1px solid #e0e0e0",
+                              }}
+                            />
+                          ) : (
+                            <div
+                              style={{
+                                width: "48px",
+                                height: "48px",
+                                backgroundColor: "#f5f5f5",
+                                borderRadius: "4px",
+                                border: "1px solid #e0e0e0",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: "10px",
+                                color: "#999",
+                              }}
+                            >
+                              No img
+                            </div>
+                          )}
+                          {/* Title and type badge */}
+                          <div style={{ flex: 1 }}>
+                            <s-stack direction="block" gap="extraTight">
+                              <s-text variant="headingSm">{item.title}</s-text>
+                              <s-badge tone={item.shopifyResourceType === "Product" ? "info" : "success"}>
+                                {item.shopifyResourceType}
+                              </s-badge>
+                            </s-stack>
+                          </div>
+                          {/* Remove button - at far right end */}
+                          <s-button variant="secondary" tone="critical" onClick={() => setTargetedItemToDelete(item)}>
                             Remove
                           </s-button>
-                        </s-stack>
+                        </div>
                       </s-box>
                     ))}
                   </s-stack>
@@ -764,6 +806,18 @@ export default function NewBundle() {
           subtitle={form.subtitle}
           selectionMode={form.selectionMode}
           addOns={addOns}
+        />
+      )}
+
+      {/* Targeted Item Delete Confirmation Modal */}
+      {targetedItemToDelete && (
+        <DeleteTargetedItemModal
+          item={targetedItemToDelete}
+          onConfirm={() => {
+            removeTargetedItem(targetedItemToDelete.id);
+            setTargetedItemToDelete(null);
+          }}
+          onCancel={() => setTargetedItemToDelete(null)}
         />
       )}
     </s-page>
@@ -1583,6 +1637,67 @@ function DeleteConfirmModal({ productTitle, onConfirm, onCancel }: DeleteConfirm
           </s-text>
         </div>
         <s-text variant="bodyMd">"{productTitle || "Untitled product"}"</s-text>
+        <div style={buttonContainerStyle}>
+          <s-button variant="secondary" onClick={onCancel}>
+            No
+          </s-button>
+          <s-button variant="primary" tone="critical" onClick={onConfirm}>
+            Yes
+          </s-button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Delete Targeted Item Confirmation Modal
+interface DeleteTargetedItemModalProps {
+  item: LocalTargetedItem;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+function DeleteTargetedItemModal({ item, onConfirm, onCancel }: DeleteTargetedItemModalProps) {
+  const modalOverlayStyle: React.CSSProperties = {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1001,
+  };
+
+  const modalContentStyle: React.CSSProperties = {
+    backgroundColor: "#fff",
+    borderRadius: "12px",
+    width: "90%",
+    maxWidth: "400px",
+    padding: "24px",
+    boxShadow: "0 4px 24px rgba(0, 0, 0, 0.2)",
+    textAlign: "center",
+  };
+
+  const buttonContainerStyle: React.CSSProperties = {
+    display: "flex",
+    justifyContent: "center",
+    gap: "12px",
+    marginTop: "20px",
+  };
+
+  return (
+    <div style={modalOverlayStyle} onClick={onCancel}>
+      <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
+        <s-text variant="headingMd">Remove {item.shopifyResourceType}</s-text>
+        <div style={{ marginTop: "12px", marginBottom: "8px" }}>
+          <s-text color="subdued">
+            Are you sure you want to remove this {item.shopifyResourceType.toLowerCase()} from targeting?
+          </s-text>
+        </div>
+        <s-text variant="bodyMd">"{item.title}"</s-text>
         <div style={buttonContainerStyle}>
           <s-button variant="secondary" onClick={onCancel}>
             No
