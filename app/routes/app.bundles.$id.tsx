@@ -1094,27 +1094,6 @@ export default function EditBundle() {
         </s-stack>
       </s-section>
 
-      {/* Discount Combinations Section */}
-      <s-section heading="Discount combinations">
-        <s-stack direction="block" gap="base">
-          <s-checkbox
-            label="Product discounts"
-            checked={form.combineWithProductDiscounts === "COMBINE"}
-            onChange={(e: Event) => handleFormChange("combineWithProductDiscounts", (e.target as HTMLInputElement).checked ? "COMBINE" : "NOT_COMBINE")}
-          />
-          <s-checkbox
-            label="Order discounts"
-            checked={form.combineWithOrderDiscounts === "COMBINE"}
-            onChange={(e: Event) => handleFormChange("combineWithOrderDiscounts", (e.target as HTMLInputElement).checked ? "COMBINE" : "NOT_COMBINE")}
-          />
-          <s-checkbox
-            label="Shipping discounts"
-            checked={form.combineWithShippingDiscounts === "COMBINE"}
-            onChange={(e: Event) => handleFormChange("combineWithShippingDiscounts", (e.target as HTMLInputElement).checked ? "COMBINE" : "NOT_COMBINE")}
-          />
-        </s-stack>
-      </s-section>
-
       {/* Add-ons Section */}
       <s-section heading="Add-on products">
         <s-stack direction="block" gap="base">
@@ -1188,6 +1167,27 @@ export default function EditBundle() {
           <s-option value="MULTIPLE" selected={form.selectionMode === "MULTIPLE"}>Multiple - Customers can select multiple add-ons</s-option>
           <s-option value="SINGLE" selected={form.selectionMode === "SINGLE"}>Single - Customers can select only one add-on</s-option>
         </s-select>
+      </s-section>
+
+      {/* Discount Combinations Section - Aside */}
+      <s-section slot="aside" heading="Discount combinations">
+        <s-stack direction="block" gap="tight">
+          <s-checkbox
+            label="Product discounts"
+            checked={form.combineWithProductDiscounts === "COMBINE"}
+            onChange={(e: Event) => handleFormChange("combineWithProductDiscounts", (e.target as HTMLInputElement).checked ? "COMBINE" : "NOT_COMBINE")}
+          />
+          <s-checkbox
+            label="Order discounts"
+            checked={form.combineWithOrderDiscounts === "COMBINE"}
+            onChange={(e: Event) => handleFormChange("combineWithOrderDiscounts", (e.target as HTMLInputElement).checked ? "COMBINE" : "NOT_COMBINE")}
+          />
+          <s-checkbox
+            label="Shipping discounts"
+            checked={form.combineWithShippingDiscounts === "COMBINE"}
+            onChange={(e: Event) => handleFormChange("combineWithShippingDiscounts", (e.target as HTMLInputElement).checked ? "COMBINE" : "NOT_COMBINE")}
+          />
+        </s-stack>
       </s-section>
 
       {/* Styles Modal */}
@@ -1694,7 +1694,118 @@ interface AddOnSetCardProps {
 }
 
 function AddOnSetCard({ addOn, onDelete, onUpdate, onEditVariants }: AddOnSetCardProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isConfigureModalOpen, setIsConfigureModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+
+  const productImageStyle: React.CSSProperties = {
+    width: "50px",
+    height: "50px",
+    objectFit: "cover",
+    borderRadius: "6px",
+    backgroundColor: "#f1f1f1",
+  };
+
+  const placeholderImageStyle: React.CSSProperties = {
+    ...productImageStyle,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#8c9196",
+    fontSize: "10px",
+  };
+
+  const discountBadgeStyle: React.CSSProperties = {
+    backgroundColor: "#e4f3e5",
+    color: "#1a7f37",
+    padding: "4px 10px",
+    borderRadius: "6px",
+    fontSize: "13px",
+    fontWeight: 500,
+    whiteSpace: "nowrap",
+  };
+
+  // Format discount display text
+  const getDiscountText = () => {
+    if (addOn.discountType === "FREE_GIFT") {
+      return "Free gift";
+    }
+    if (addOn.discountType === "PERCENTAGE" && addOn.discountValue) {
+      return `Percentage discount: ${addOn.discountValue}%`;
+    }
+    if (addOn.discountType === "FIXED_AMOUNT" && addOn.discountValue) {
+      return `Fixed amount off: $${addOn.discountValue}`;
+    }
+    if (addOn.discountType === "FIXED_PRICE" && addOn.discountValue) {
+      return `Fixed price: $${addOn.discountValue}`;
+    }
+    return "No discount";
+  };
+
+  return (
+    <>
+      <s-box padding="base" borderWidth="base" borderRadius="base">
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          {/* Product Image */}
+          {addOn.productImageUrl ? (
+            <img src={addOn.productImageUrl} alt={addOn.productTitle || ""} style={productImageStyle} />
+          ) : (
+            <div style={placeholderImageStyle}>No image</div>
+          )}
+
+          {/* Product Title and Discount Info */}
+          <div style={{ flex: 1 }}>
+            <s-text variant="headingSm">{addOn.productTitle || "Untitled product"}</s-text>
+            <div style={{ marginTop: "4px" }}>
+              <span style={discountBadgeStyle}>{getDiscountText()}</span>
+            </div>
+          </div>
+
+          {/* Action Buttons - Right Side */}
+          <div style={{ display: "flex", gap: "10px", marginLeft: "auto" }}>
+            <s-button variant="secondary" onClick={() => setIsConfigureModalOpen(true)}>
+              Configure
+            </s-button>
+            <s-button variant="secondary" tone="critical" onClick={() => setIsDeleteModalOpen(true)}>
+              Remove
+            </s-button>
+          </div>
+        </div>
+      </s-box>
+
+      {/* Configure Modal */}
+      {isConfigureModalOpen && (
+        <ConfigureAddOnSetModal
+          addOn={addOn}
+          onUpdate={onUpdate}
+          onEditVariants={onEditVariants}
+          onClose={() => setIsConfigureModalOpen(false)}
+        />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && (
+        <DeleteAddOnConfirmModal
+          productTitle={addOn.productTitle || ""}
+          onConfirm={() => {
+            onDelete();
+            setIsDeleteModalOpen(false);
+          }}
+          onCancel={() => setIsDeleteModalOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+// Configure Add-On Set Modal Component
+interface ConfigureAddOnSetModalProps {
+  addOn: AddOnSetWithVariants;
+  onUpdate: (data: Record<string, string>) => void;
+  onEditVariants: () => void;
+  onClose: () => void;
+}
+
+function ConfigureAddOnSetModal({ addOn, onUpdate, onEditVariants, onClose }: ConfigureAddOnSetModalProps) {
   const [discountType, setDiscountType] = useState(addOn.discountType);
   const [discountValue, setDiscountValue] = useState(addOn.discountValue?.toString() || "");
   const [discountLabel, setDiscountLabel] = useState(addOn.discountLabel || "");
@@ -1713,28 +1824,91 @@ function AddOnSetCard({ addOn, onDelete, onUpdate, onEditVariants }: AddOnSetCar
       showQuantitySelector: String(showQuantitySelector),
       maxQuantity: String(maxQuantity),
     });
+    onClose();
+  };
+
+  const modalOverlayStyle: React.CSSProperties = {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1000,
+  };
+
+  const modalContentStyle: React.CSSProperties = {
+    backgroundColor: "#fff",
+    borderRadius: "12px",
+    width: "90%",
+    maxWidth: "500px",
+    maxHeight: "85vh",
+    overflow: "hidden",
+    boxShadow: "0 4px 24px rgba(0, 0, 0, 0.2)",
+    display: "flex",
+    flexDirection: "column",
+  };
+
+  const modalHeaderStyle: React.CSSProperties = {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "16px 20px",
+    borderBottom: "1px solid #e0e0e0",
+  };
+
+  const modalBodyStyle: React.CSSProperties = {
+    padding: "20px",
+    overflowY: "auto",
+    flex: 1,
+  };
+
+  const modalFooterStyle: React.CSSProperties = {
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: "12px",
+    padding: "16px 20px",
+    borderTop: "1px solid #e0e0e0",
   };
 
   return (
-    <s-box padding="base" borderWidth="base" borderRadius="base">
-      <s-stack direction="block" gap="base">
-        <s-stack direction="inline" gap="base" align="center">
-          <s-stack direction="block" gap="tight" style={{ flex: 1 }}>
-            <s-text variant="headingSm">{addOn.productTitle || "Untitled product"}</s-text>
-            <s-text variant="bodySm" color="subdued">
-              {discountType === "FREE_GIFT" ? "Free gift" : `${discountType.replace(/_/g, " ")}${discountValue ? `: ${discountValue}` : ""}`}
-            </s-text>
-          </s-stack>
-          <s-button variant="tertiary" onClick={() => setIsExpanded(!isExpanded)}>
-            {isExpanded ? "Collapse" : "Configure"}
-          </s-button>
-          <s-button variant="tertiary" tone="critical" onClick={onDelete}>
-            Remove
-          </s-button>
-        </s-stack>
+    <div style={modalOverlayStyle} onClick={onClose}>
+      <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
+        <div style={modalHeaderStyle}>
+          <s-text variant="headingMd">Configure Add-On</s-text>
+          <s-button variant="tertiary" onClick={onClose}>✕</s-button>
+        </div>
 
-        {isExpanded && (
+        <div style={modalBodyStyle}>
           <s-stack direction="block" gap="base">
+            {/* Product Info with Variants */}
+            <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
+              {addOn.productImageUrl ? (
+                <img
+                  src={addOn.productImageUrl}
+                  alt={addOn.productTitle || ""}
+                  style={{ width: "60px", height: "60px", objectFit: "cover", borderRadius: "8px" }}
+                />
+              ) : (
+                <div style={{ width: "60px", height: "60px", backgroundColor: "#f1f1f1", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", color: "#8c9196", fontSize: "10px" }}>
+                  No image
+                </div>
+              )}
+              <div style={{ flex: 1 }}>
+                <s-text variant="headingSm">{addOn.productTitle || "Untitled product"}</s-text>
+                <div style={{ marginTop: "6px" }}>
+                  <s-badge tone="info">{addOn.selectedVariants.length} variant(s) selected</s-badge>
+                </div>
+              </div>
+              <s-button variant="secondary" onClick={onEditVariants}>
+                Edit variants
+              </s-button>
+            </div>
+
+            {/* Discount Type */}
             <s-select
               label="Discount type"
               value={discountType}
@@ -1746,6 +1920,7 @@ function AddOnSetCard({ addOn, onDelete, onUpdate, onEditVariants }: AddOnSetCar
               <s-option value="FREE_GIFT" selected={discountType === "FREE_GIFT"}>Free gift (100% off)</s-option>
             </s-select>
 
+            {/* Discount Value */}
             {discountType !== "FREE_GIFT" && (
               <s-text-field
                 label={discountType === "PERCENTAGE" ? "Discount percentage" : "Discount amount"}
@@ -1757,6 +1932,7 @@ function AddOnSetCard({ addOn, onDelete, onUpdate, onEditVariants }: AddOnSetCar
               />
             )}
 
+            {/* Discount Label */}
             <s-text-field
               label="Discount label (optional)"
               value={discountLabel}
@@ -1764,25 +1940,27 @@ function AddOnSetCard({ addOn, onDelete, onUpdate, onEditVariants }: AddOnSetCar
               placeholder="e.g., Save 20%"
             />
 
-            <s-checkbox
-              label="Pre-selected by default"
-              checked={isDefaultSelected}
-              disabled={discountType === "FREE_GIFT" || undefined}
-              onChange={(e: Event) => setIsDefaultSelected((e.target as HTMLInputElement).checked)}
-            />
+            {/* Checkboxes */}
+            <s-stack direction="block" gap="tight">
+              <s-checkbox
+                label="Pre-selected by default"
+                checked={isDefaultSelected}
+                disabled={discountType === "FREE_GIFT" || undefined}
+                onChange={(e: Event) => setIsDefaultSelected((e.target as HTMLInputElement).checked)}
+              />
+              <s-checkbox
+                label="Subscription orders only"
+                checked={subscriptionOnly}
+                onChange={(e: Event) => setSubscriptionOnly((e.target as HTMLInputElement).checked)}
+              />
+              <s-checkbox
+                label="Show quantity selector"
+                checked={showQuantitySelector}
+                onChange={(e: Event) => setShowQuantitySelector((e.target as HTMLInputElement).checked)}
+              />
+            </s-stack>
 
-            <s-checkbox
-              label="Subscription orders only"
-              checked={subscriptionOnly}
-              onChange={(e: Event) => setSubscriptionOnly((e.target as HTMLInputElement).checked)}
-            />
-
-            <s-checkbox
-              label="Show quantity selector"
-              checked={showQuantitySelector}
-              onChange={(e: Event) => setShowQuantitySelector((e.target as HTMLInputElement).checked)}
-            />
-
+            {/* Max Quantity */}
             {showQuantitySelector && (
               <s-text-field
                 label="Maximum quantity"
@@ -1793,22 +1971,80 @@ function AddOnSetCard({ addOn, onDelete, onUpdate, onEditVariants }: AddOnSetCar
                 max="99"
               />
             )}
-
-            <s-stack direction="inline" gap="tight" align="center">
-              <s-button variant="secondary" onClick={handleSave}>
-                Save add-on settings
-              </s-button>
-              <s-text variant="bodySm" color="subdued">
-                {addOn.selectedVariants.length} variant(s) included
-              </s-text>
-              <s-button variant="tertiary" onClick={onEditVariants}>
-                Edit variants
-              </s-button>
-            </s-stack>
           </s-stack>
-        )}
-      </s-stack>
-    </s-box>
+        </div>
+
+        <div style={modalFooterStyle}>
+          <s-button variant="secondary" onClick={onClose}>
+            Cancel
+          </s-button>
+          <s-button variant="primary" onClick={handleSave}>
+            Save
+          </s-button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Delete Add-On Confirmation Modal Component
+interface DeleteAddOnConfirmModalProps {
+  productTitle: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+function DeleteAddOnConfirmModal({ productTitle, onConfirm, onCancel }: DeleteAddOnConfirmModalProps) {
+  const modalOverlayStyle: React.CSSProperties = {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1001,
+  };
+
+  const modalContentStyle: React.CSSProperties = {
+    backgroundColor: "#fff",
+    borderRadius: "12px",
+    width: "90%",
+    maxWidth: "400px",
+    padding: "24px",
+    boxShadow: "0 4px 24px rgba(0, 0, 0, 0.2)",
+    textAlign: "center",
+  };
+
+  const buttonContainerStyle: React.CSSProperties = {
+    display: "flex",
+    justifyContent: "center",
+    gap: "12px",
+    marginTop: "20px",
+  };
+
+  return (
+    <div style={modalOverlayStyle} onClick={onCancel}>
+      <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
+        <s-text variant="headingMd">Remove Add-On Product</s-text>
+        <div style={{ marginTop: "12px", marginBottom: "8px" }}>
+          <s-text color="subdued">
+            Are you sure you want to delete this add-on product?
+          </s-text>
+        </div>
+        <s-text variant="bodyMd">"{productTitle || "Untitled product"}"</s-text>
+        <div style={buttonContainerStyle}>
+          <s-button variant="secondary" onClick={onCancel}>
+            No
+          </s-button>
+          <s-button variant="primary" tone="critical" onClick={onConfirm}>
+            Yes
+          </s-button>
+        </div>
+      </div>
+    </div>
   );
 }
 
