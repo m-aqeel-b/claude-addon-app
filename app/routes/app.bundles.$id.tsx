@@ -46,8 +46,6 @@ import type {
   WidgetStyle,
 } from "@prisma/client";
 
-type TabType = "general" | "addons" | "styles";
-
 interface LoaderData {
   bundle: BundleWithRelations;
   addOnSets: AddOnSetWithVariants[];
@@ -62,6 +60,29 @@ type AdminClient = {
     json: () => Promise<{ data?: Record<string, unknown>; errors?: Array<{ message: string }> }>;
   }>;
 };
+
+// Style state type for local management
+interface StyleState {
+  backgroundColor: string;
+  fontColor: string;
+  buttonColor: string;
+  buttonTextColor: string;
+  discountBadgeColor: string;
+  discountTextColor: string;
+  borderColor: string;
+  fontSize: number;
+  titleFontSize: number;
+  subtitleFontSize: number;
+  layoutType: LayoutType;
+  borderRadius: number;
+  borderStyle: BorderStyle;
+  borderWidth: number;
+  padding: number;
+  marginTop: number;
+  marginBottom: number;
+  imageSize: ImageSize;
+  discountLabelStyle: DiscountLabelStyle;
+}
 
 // Helper to sync metafields after bundle changes
 async function syncBundleMetafields(
@@ -662,6 +683,7 @@ export default function EditBundle() {
   const params = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const [newGroupTitle, setNewGroupTitle] = useState("");
+  const [isStyleModalOpen, setIsStyleModalOpen] = useState(false);
 
   // Show toast for bundle creation (redirected from new bundle page)
   useEffect(() => {
@@ -681,17 +703,13 @@ export default function EditBundle() {
     }
   }, []);
 
-  const [activeTab, setActiveTab] = useState<TabType>("general");
-
   // Refs for web component buttons
   const saveButtonRef = useRef<HTMLElement>(null);
   const deleteButtonRef = useRef<HTMLElement>(null);
   const syncButtonRef = useRef<HTMLElement>(null);
-  const generalTabRef = useRef<HTMLElement>(null);
-  const addonsTabRef = useRef<HTMLElement>(null);
-  const stylesTabRef = useRef<HTMLElement>(null);
   const addProductButtonRef = useRef<HTMLElement>(null);
-  const resetStylesButtonRef = useRef<HTMLElement>(null);
+  const stylesButtonRef = useRef<HTMLElement>(null);
+
   const [form, setForm] = useState({
     title: bundle.title,
     subtitle: bundle.subtitle || "",
@@ -705,7 +723,7 @@ export default function EditBundle() {
     combineWithShippingDiscounts: bundle.combineWithShippingDiscounts,
   });
 
-  const [style, setStyle] = useState({
+  const [style, setStyle] = useState<StyleState>({
     backgroundColor: widgetStyle.backgroundColor,
     fontColor: widgetStyle.fontColor,
     buttonColor: widgetStyle.buttonColor,
@@ -748,8 +766,32 @@ export default function EditBundle() {
       shopify.toast.show("Add-on removed & synced to store");
     } else if (fetcher.data?.action === "styleUpdated") {
       shopify.toast.show("Styles saved & synced to store");
+      setIsStyleModalOpen(false);
     } else if (fetcher.data?.action === "styleReset") {
       shopify.toast.show("Styles reset & synced to store");
+      // Update local style state with defaults
+      setStyle({
+        backgroundColor: "#ffffff",
+        fontColor: "#000000",
+        buttonColor: "#000000",
+        buttonTextColor: "#ffffff",
+        discountBadgeColor: "#e53935",
+        discountTextColor: "#ffffff",
+        borderColor: "#e0e0e0",
+        fontSize: 14,
+        titleFontSize: 18,
+        subtitleFontSize: 14,
+        layoutType: "LIST",
+        borderRadius: 8,
+        borderStyle: "SOLID",
+        borderWidth: 1,
+        padding: 16,
+        marginTop: 16,
+        marginBottom: 16,
+        imageSize: "MEDIUM",
+        discountLabelStyle: "BADGE",
+      });
+      setIsStyleModalOpen(false);
     } else if (fetcher.data?.action === "targetedItemAdded") {
       shopify.toast.show("Product/collection added & synced");
     } else if (fetcher.data?.action === "targetedItemRemoved") {
@@ -776,7 +818,7 @@ export default function EditBundle() {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleStyleChange = (field: string, value: string | number) => {
+  const handleStyleChange = (field: keyof StyleState, value: string | number) => {
     setStyle((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -898,12 +940,11 @@ export default function EditBundle() {
   // Attach event listeners for web component buttons
   useEffect(() => {
     const saveBtn = saveButtonRef.current;
-    const handler = activeTab === "styles" ? handleSaveStyles : handleSaveBundle;
     if (saveBtn) {
-      saveBtn.addEventListener("click", handler);
-      return () => saveBtn.removeEventListener("click", handler);
+      saveBtn.addEventListener("click", handleSaveBundle);
+      return () => saveBtn.removeEventListener("click", handleSaveBundle);
     }
-  }, [activeTab, handleSaveStyles, handleSaveBundle]);
+  }, [handleSaveBundle]);
 
   useEffect(() => {
     const deleteBtn = deleteButtonRef.current;
@@ -922,47 +963,21 @@ export default function EditBundle() {
   }, [handleSyncMetafields]);
 
   useEffect(() => {
-    const btn = generalTabRef.current;
-    const handler = () => setActiveTab("general");
-    if (btn) {
-      btn.addEventListener("click", handler);
-      return () => btn.removeEventListener("click", handler);
-    }
-  }, []);
-
-  useEffect(() => {
-    const btn = addonsTabRef.current;
-    const handler = () => setActiveTab("addons");
-    if (btn) {
-      btn.addEventListener("click", handler);
-      return () => btn.removeEventListener("click", handler);
-    }
-  }, []);
-
-  useEffect(() => {
-    const btn = stylesTabRef.current;
-    const handler = () => setActiveTab("styles");
-    if (btn) {
-      btn.addEventListener("click", handler);
-      return () => btn.removeEventListener("click", handler);
-    }
-  }, []);
-
-  useEffect(() => {
     const btn = addProductButtonRef.current;
     if (btn) {
       btn.addEventListener("click", openProductPicker);
       return () => btn.removeEventListener("click", openProductPicker);
     }
-  }, [openProductPicker, activeTab]);
+  }, [openProductPicker]);
 
   useEffect(() => {
-    const btn = resetStylesButtonRef.current;
+    const btn = stylesButtonRef.current;
+    const handler = () => setIsStyleModalOpen(true);
     if (btn) {
-      btn.addEventListener("click", handleResetStyles);
-      return () => btn.removeEventListener("click", handleResetStyles);
+      btn.addEventListener("click", handler);
+      return () => btn.removeEventListener("click", handler);
     }
-  }, [handleResetStyles, activeTab]);
+  }, []);
 
   // Targeting handlers
   const openTargetedResourcePicker = async (type: "product" | "collection") => {
@@ -1054,531 +1069,697 @@ export default function EditBundle() {
         Force Sync
       </s-button>
 
-      {/* Tab Navigation */}
-      <s-section>
-        <s-stack direction="inline" gap="tight">
-          <s-button
-            ref={generalTabRef}
-            variant={activeTab === "general" ? "primary" : "secondary"}
-          >
-            General
-          </s-button>
-          <s-button
-            ref={addonsTabRef}
-            variant={activeTab === "addons" ? "primary" : "secondary"}
-          >
-            Add-ons ({addOnSets.length})
-          </s-button>
-          <s-button
-            ref={stylesTabRef}
-            variant={activeTab === "styles" ? "primary" : "secondary"}
-          >
-            Styles
-          </s-button>
+      {/* Basic Information Section */}
+      <s-section heading="Basic information">
+        <s-stack direction="block" gap="base">
+          <s-text-field
+            label="Title"
+            value={form.title}
+            onInput={(e: Event) => handleFormChange("title", (e.target as HTMLInputElement).value)}
+            error={errors.title}
+            required
+          />
+          <s-text-field
+            label="Subtitle"
+            value={form.subtitle}
+            onInput={(e: Event) => handleFormChange("subtitle", (e.target as HTMLInputElement).value)}
+          />
         </s-stack>
       </s-section>
 
-      {/* General Tab */}
-      {activeTab === "general" && (
-        <>
-          <s-section heading="Basic information">
-            <s-stack direction="block" gap="base">
-              <s-text-field
-                label="Title"
-                value={form.title}
-                onInput={(e: Event) => handleFormChange("title", (e.target as HTMLInputElement).value)}
-                error={errors.title}
-                required
+      {/* Status & Schedule Section */}
+      <s-section heading="Status & Schedule">
+        <s-stack direction="block" gap="base">
+          <div>
+            <label style={{ display: "block", marginBottom: "4px", fontWeight: 500, fontSize: "14px" }}>Status</label>
+            <select
+              style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #8c9196", fontSize: "14px", backgroundColor: "#fff" }}
+              value={form.status}
+              onChange={(e) => handleFormChange("status", e.target.value)}
+            >
+              <option value="DRAFT">Draft</option>
+              <option value="ACTIVE">Active</option>
+              <option value="ARCHIVED">Archived</option>
+            </select>
+          </div>
+
+          <s-stack direction="inline" gap="base">
+            <div style={{ flex: 1 }}>
+              <label style={{ display: "block", marginBottom: "4px", fontWeight: 500, fontSize: "14px" }}>Start date</label>
+              <input
+                type="datetime-local"
+                style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #8c9196", fontSize: "14px", backgroundColor: "#fff" }}
+                value={form.startDate}
+                onChange={(e) => handleFormChange("startDate", e.target.value)}
               />
-              <s-text-field
-                label="Subtitle"
-                value={form.subtitle}
-                onInput={(e: Event) => handleFormChange("subtitle", (e.target as HTMLInputElement).value)}
-              />
-            </s-stack>
-          </s-section>
-
-          <s-section heading="Status & Schedule">
-            <s-stack direction="block" gap="base">
-              <div>
-                <label style={{ display: "block", marginBottom: "4px", fontWeight: 500, fontSize: "14px" }}>Status</label>
-                <select
-                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #8c9196", fontSize: "14px", backgroundColor: "#fff" }}
-                  value={form.status}
-                  onChange={(e) => handleFormChange("status", e.target.value)}
-                >
-                  <option value="DRAFT">Draft</option>
-                  <option value="ACTIVE">Active</option>
-                  <option value="ARCHIVED">Archived</option>
-                </select>
-              </div>
-
-              <s-stack direction="inline" gap="base">
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: "block", marginBottom: "4px", fontWeight: 500, fontSize: "14px" }}>Start date</label>
-                  <input
-                    type="datetime-local"
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #8c9196", fontSize: "14px", backgroundColor: "#fff" }}
-                    value={form.startDate}
-                    onChange={(e) => handleFormChange("startDate", e.target.value)}
-                  />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: "block", marginBottom: "4px", fontWeight: 500, fontSize: "14px" }}>End date</label>
-                  <input
-                    type="datetime-local"
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: errors.endDate ? "1px solid #d72c0d" : "1px solid #8c9196", fontSize: "14px", backgroundColor: "#fff" }}
-                    value={form.endDate}
-                    onChange={(e) => handleFormChange("endDate", e.target.value)}
-                  />
-                  {errors.endDate && (
-                    <span style={{ color: "#d72c0d", fontSize: "12px", marginTop: "4px", display: "block" }}>{errors.endDate}</span>
-                  )}
-                </div>
-              </s-stack>
-            </s-stack>
-          </s-section>
-
-          <s-section heading="Selection mode">
-            <div>
-              <label style={{ display: "block", marginBottom: "8px", fontWeight: 500, fontSize: "14px" }}>How can customers select add-ons?</label>
-              <s-stack direction="block" gap="tight">
-                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-                  <input
-                    type="radio"
-                    name="selectionMode"
-                    value="MULTIPLE"
-                    checked={form.selectionMode === "MULTIPLE"}
-                    onChange={(e) => handleFormChange("selectionMode", e.target.value)}
-                  />
-                  <span>Multiple selection (checkboxes)</span>
-                </label>
-                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-                  <input
-                    type="radio"
-                    name="selectionMode"
-                    value="SINGLE"
-                    checked={form.selectionMode === "SINGLE"}
-                    onChange={(e) => handleFormChange("selectionMode", e.target.value)}
-                  />
-                  <span>Single selection (radio buttons)</span>
-                </label>
-              </s-stack>
             </div>
-          </s-section>
-
-          <s-section heading="Product targeting">
-            <s-stack direction="block" gap="base">
-              <div>
-                <label style={{ display: "block", marginBottom: "8px", fontWeight: 500, fontSize: "14px" }}>Which products show this bundle?</label>
-                <s-stack direction="block" gap="tight">
-                  <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-                    <input
-                      type="radio"
-                      name="targetingType"
-                      value="ALL_PRODUCTS"
-                      checked={form.targetingType === "ALL_PRODUCTS"}
-                      onChange={(e) => handleFormChange("targetingType", e.target.value)}
-                    />
-                    <span>All products</span>
-                  </label>
-                  <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-                    <input
-                      type="radio"
-                      name="targetingType"
-                      value="SPECIFIC_PRODUCTS"
-                      checked={form.targetingType === "SPECIFIC_PRODUCTS"}
-                      onChange={(e) => handleFormChange("targetingType", e.target.value)}
-                    />
-                    <span>Specific products or collections</span>
-                  </label>
-                  <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-                    <input
-                      type="radio"
-                      name="targetingType"
-                      value="PRODUCT_GROUPS"
-                      checked={form.targetingType === "PRODUCT_GROUPS"}
-                      onChange={(e) => handleFormChange("targetingType", e.target.value)}
-                    />
-                    <span>Product groups (with tabs)</span>
-                  </label>
-                </s-stack>
-              </div>
-
-              {/* Description for each targeting type */}
-              {form.targetingType === "ALL_PRODUCTS" && (
-                <s-text color="subdued">
-                  Add-ons will appear on all product pages in your store.
-                </s-text>
-              )}
-
-              {/* Specific products/collections UI */}
-              {form.targetingType === "SPECIFIC_PRODUCTS" && (
-                <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
-                  <s-stack direction="block" gap="base">
-                    <s-text variant="headingSm">Selected products and collections</s-text>
-                    <s-text color="subdued">
-                      Add-ons will only appear on these specific products or products in these collections.
-                    </s-text>
-
-                    <s-stack direction="inline" gap="tight">
-                      <button
-                        style={{ padding: "8px 16px", borderRadius: "8px", border: "1px solid #8c9196", backgroundColor: "#fff", cursor: "pointer", fontSize: "14px" }}
-                        onClick={() => openTargetedResourcePicker("product")}
-                      >
-                        Add products
-                      </button>
-                      <button
-                        style={{ padding: "8px 16px", borderRadius: "8px", border: "1px solid #8c9196", backgroundColor: "#fff", cursor: "pointer", fontSize: "14px" }}
-                        onClick={() => openTargetedResourcePicker("collection")}
-                      >
-                        Add collections
-                      </button>
-                    </s-stack>
-
-                    {targetedItems.length === 0 ? (
-                      <s-text color="subdued" variant="bodySm">
-                        No products or collections selected yet.
-                      </s-text>
-                    ) : (
-                      <s-stack direction="block" gap="tight">
-                        {targetedItems.map((item) => (
-                          <s-box key={item.id} padding="tight" borderWidth="base" borderRadius="base">
-                            <s-stack direction="inline" gap="tight">
-                              <s-badge tone={item.shopifyResourceType === "Product" ? "info" : "success"}>
-                                {item.shopifyResourceType}
-                              </s-badge>
-                              <s-text style={{ flex: 1 }}>{item.title || item.shopifyResourceId}</s-text>
-                              <button
-                                style={{ background: "none", border: "none", color: "#d72c0d", cursor: "pointer", fontSize: "14px" }}
-                                onClick={() => handleRemoveTargetedItem(item.id)}
-                              >
-                                Remove
-                              </button>
-                            </s-stack>
-                          </s-box>
-                        ))}
-                      </s-stack>
-                    )}
-                  </s-stack>
-                </s-box>
-              )}
-
-              {/* Product groups UI */}
-              {form.targetingType === "PRODUCT_GROUPS" && (
-                <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
-                  <s-stack direction="block" gap="base">
-                    <s-text variant="headingSm">Product groups</s-text>
-                    <s-text color="subdued">
-                      Create groups of products. Each group will appear as a tab in the widget.
-                    </s-text>
-
-                    {/* Create new group */}
-                    <s-stack direction="inline" gap="tight">
-                      <div style={{ flex: 1 }}>
-                        <label style={{ display: "block", marginBottom: "4px", fontWeight: 500, fontSize: "14px" }}>New group name</label>
-                        <input
-                          type="text"
-                          style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #8c9196", fontSize: "14px", backgroundColor: "#fff" }}
-                          value={newGroupTitle}
-                          onChange={(e) => setNewGroupTitle(e.target.value)}
-                          placeholder="e.g., Accessories"
-                        />
-                      </div>
-                      <button
-                        style={{ padding: "8px 16px", borderRadius: "8px", border: "1px solid #8c9196", backgroundColor: "#fff", cursor: "pointer", fontSize: "14px", alignSelf: "flex-end" }}
-                        onClick={handleCreateProductGroup}
-                        disabled={!newGroupTitle.trim()}
-                      >
-                        Create group
-                      </button>
-                    </s-stack>
-
-                    {/* Existing groups */}
-                    {productGroups.length === 0 ? (
-                      <s-text color="subdued" variant="bodySm">
-                        No product groups created yet.
-                      </s-text>
-                    ) : (
-                      <s-stack direction="block" gap="base">
-                        {productGroups.map((group) => (
-                          <s-box key={group.id} padding="base" borderWidth="base" borderRadius="base">
-                            <s-stack direction="block" gap="tight">
-                              <s-stack direction="inline" gap="tight">
-                                <s-text variant="headingSm" style={{ flex: 1 }}>{group.title}</s-text>
-                                <button
-                                  style={{ background: "none", border: "none", color: "#2c6ecb", cursor: "pointer", fontSize: "14px" }}
-                                  onClick={() => openGroupResourcePicker(group.id)}
-                                >
-                                  Add products
-                                </button>
-                                <button
-                                  style={{ background: "none", border: "none", color: "#d72c0d", cursor: "pointer", fontSize: "14px" }}
-                                  onClick={() => handleDeleteProductGroup(group.id, group.title)}
-                                >
-                                  Delete group
-                                </button>
-                              </s-stack>
-
-                              {group.items.length === 0 ? (
-                                <s-text color="subdued" variant="bodySm">
-                                  No products in this group.
-                                </s-text>
-                              ) : (
-                                <s-stack direction="inline" gap="tight" wrap>
-                                  {group.items.map((item) => (
-                                    <s-box key={item.id} padding="tight" borderWidth="base" borderRadius="base">
-                                      <s-stack direction="inline" gap="tight">
-                                        <s-text variant="bodySm">{item.title || "Product"}</s-text>
-                                        <button
-                                          style={{ background: "none", border: "none", color: "#d72c0d", cursor: "pointer", fontSize: "14px" }}
-                                          onClick={() => handleRemoveProductGroupItem(item.id)}
-                                        >
-                                          ×
-                                        </button>
-                                      </s-stack>
-                                    </s-box>
-                                  ))}
-                                </s-stack>
-                              )}
-                            </s-stack>
-                          </s-box>
-                        ))}
-                      </s-stack>
-                    )}
-                  </s-stack>
-                </s-box>
-              )}
-            </s-stack>
-          </s-section>
-
-          <s-section heading="Discount combinations">
-            <s-stack direction="block" gap="base">
-              <div>
-                <label style={{ display: "block", marginBottom: "4px", fontWeight: 500, fontSize: "14px" }}>With product discounts</label>
-                <select
-                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #8c9196", fontSize: "14px", backgroundColor: "#fff" }}
-                  value={form.combineWithProductDiscounts}
-                  onChange={(e) => handleFormChange("combineWithProductDiscounts", e.target.value)}
-                >
-                  <option value="COMBINE">Combine</option>
-                  <option value="NOT_COMBINE">Do not combine</option>
-                </select>
-              </div>
-              <div>
-                <label style={{ display: "block", marginBottom: "4px", fontWeight: 500, fontSize: "14px" }}>With order discounts</label>
-                <select
-                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #8c9196", fontSize: "14px", backgroundColor: "#fff" }}
-                  value={form.combineWithOrderDiscounts}
-                  onChange={(e) => handleFormChange("combineWithOrderDiscounts", e.target.value)}
-                >
-                  <option value="COMBINE">Combine</option>
-                  <option value="NOT_COMBINE">Do not combine</option>
-                </select>
-              </div>
-              <div>
-                <label style={{ display: "block", marginBottom: "4px", fontWeight: 500, fontSize: "14px" }}>With shipping discounts</label>
-                <select
-                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #8c9196", fontSize: "14px", backgroundColor: "#fff" }}
-                  value={form.combineWithShippingDiscounts}
-                  onChange={(e) => handleFormChange("combineWithShippingDiscounts", e.target.value)}
-                >
-                  <option value="COMBINE">Combine</option>
-                  <option value="NOT_COMBINE">Do not combine</option>
-                </select>
-              </div>
-            </s-stack>
-          </s-section>
-        </>
-      )}
-
-      {/* Add-ons Tab */}
-      {activeTab === "addons" && (
-        <>
-          <s-section heading="Add-on products">
-            <s-stack direction="block" gap="base">
-              <s-button ref={addProductButtonRef} variant="secondary">
-                Add product
-              </s-button>
-
-              {addOnSets.length === 0 ? (
-                <s-box padding="600" textAlign="center">
-                  <s-stack direction="block" gap="base">
-                    <s-text>No add-on products yet</s-text>
-                    <s-text color="subdued">
-                      Add products that customers can select as add-ons
-                    </s-text>
-                  </s-stack>
-                </s-box>
-              ) : (
-                <s-stack direction="block" gap="base">
-                  {addOnSets.map((addOn) => (
-                    <AddOnSetCard
-                      key={addOn.id}
-                      addOn={addOn}
-                      onDelete={() => handleDeleteAddOn(addOn.id, addOn.productTitle || "Add-on")}
-                      onUpdate={(data) => {
-                        fetcher.submit(
-                          { intent: "updateAddOnSet", addOnSetId: addOn.id, ...data },
-                          { method: "POST" }
-                        );
-                      }}
-                      onEditVariants={() => {
-                        openVariantEditor(
-                          addOn.id,
-                          addOn.shopifyProductId,
-                          addOn.selectedVariants.map(v => v.shopifyVariantId)
-                        );
-                      }}
-                    />
-                  ))}
-                </s-stack>
-              )}
-            </s-stack>
-          </s-section>
-        </>
-      )}
-
-      {/* Styles Tab */}
-      {activeTab === "styles" && (
-        <>
-          <s-section heading="Colors">
-            <s-stack direction="block" gap="base">
-              <s-stack direction="inline" gap="base">
-                <s-text-field
-                  type="color"
-                  label="Background"
-                  value={style.backgroundColor}
-                  onInput={(e: Event) => handleStyleChange("backgroundColor", (e.target as HTMLInputElement).value)}
-                />
-                <s-text-field
-                  type="color"
-                  label="Font"
-                  value={style.fontColor}
-                  onInput={(e: Event) => handleStyleChange("fontColor", (e.target as HTMLInputElement).value)}
-                />
-              </s-stack>
-              <s-stack direction="inline" gap="base">
-                <s-text-field
-                  type="color"
-                  label="Button"
-                  value={style.buttonColor}
-                  onInput={(e: Event) => handleStyleChange("buttonColor", (e.target as HTMLInputElement).value)}
-                />
-                <s-text-field
-                  type="color"
-                  label="Button text"
-                  value={style.buttonTextColor}
-                  onInput={(e: Event) => handleStyleChange("buttonTextColor", (e.target as HTMLInputElement).value)}
-                />
-              </s-stack>
-              <s-stack direction="inline" gap="base">
-                <s-text-field
-                  type="color"
-                  label="Discount badge"
-                  value={style.discountBadgeColor}
-                  onInput={(e: Event) => handleStyleChange("discountBadgeColor", (e.target as HTMLInputElement).value)}
-                />
-                <s-text-field
-                  type="color"
-                  label="Discount text"
-                  value={style.discountTextColor}
-                  onInput={(e: Event) => handleStyleChange("discountTextColor", (e.target as HTMLInputElement).value)}
-                />
-              </s-stack>
-              <s-text-field
-                type="color"
-                label="Border color"
-                value={style.borderColor}
-                onInput={(e: Event) => handleStyleChange("borderColor", (e.target as HTMLInputElement).value)}
+            <div style={{ flex: 1 }}>
+              <label style={{ display: "block", marginBottom: "4px", fontWeight: 500, fontSize: "14px" }}>End date</label>
+              <input
+                type="datetime-local"
+                style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: errors.endDate ? "1px solid #d72c0d" : "1px solid #8c9196", fontSize: "14px", backgroundColor: "#fff" }}
+                value={form.endDate}
+                onChange={(e) => handleFormChange("endDate", e.target.value)}
               />
-            </s-stack>
-          </s-section>
+              {errors.endDate && (
+                <span style={{ color: "#d72c0d", fontSize: "12px", marginTop: "4px", display: "block" }}>{errors.endDate}</span>
+              )}
+            </div>
+          </s-stack>
+        </s-stack>
+      </s-section>
 
-          <s-section heading="Layout">
+      {/* Selection Mode Section */}
+      <s-section heading="Selection mode">
+        <div>
+          <label style={{ display: "block", marginBottom: "8px", fontWeight: 500, fontSize: "14px" }}>How can customers select add-ons?</label>
+          <s-stack direction="block" gap="tight">
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+              <input
+                type="radio"
+                name="selectionMode"
+                value="MULTIPLE"
+                checked={form.selectionMode === "MULTIPLE"}
+                onChange={(e) => handleFormChange("selectionMode", e.target.value)}
+              />
+              <span>Multiple selection (checkboxes)</span>
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+              <input
+                type="radio"
+                name="selectionMode"
+                value="SINGLE"
+                checked={form.selectionMode === "SINGLE"}
+                onChange={(e) => handleFormChange("selectionMode", e.target.value)}
+              />
+              <span>Single selection (radio buttons)</span>
+            </label>
+          </s-stack>
+        </div>
+      </s-section>
+
+      {/* Product Targeting Section */}
+      <s-section heading="Product targeting">
+        <s-stack direction="block" gap="base">
+          <div>
+            <label style={{ display: "block", marginBottom: "8px", fontWeight: 500, fontSize: "14px" }}>Which products show this bundle?</label>
+            <s-stack direction="block" gap="tight">
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                <input
+                  type="radio"
+                  name="targetingType"
+                  value="ALL_PRODUCTS"
+                  checked={form.targetingType === "ALL_PRODUCTS"}
+                  onChange={(e) => handleFormChange("targetingType", e.target.value)}
+                />
+                <span>All products</span>
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                <input
+                  type="radio"
+                  name="targetingType"
+                  value="SPECIFIC_PRODUCTS"
+                  checked={form.targetingType === "SPECIFIC_PRODUCTS"}
+                  onChange={(e) => handleFormChange("targetingType", e.target.value)}
+                />
+                <span>Specific products or collections</span>
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                <input
+                  type="radio"
+                  name="targetingType"
+                  value="PRODUCT_GROUPS"
+                  checked={form.targetingType === "PRODUCT_GROUPS"}
+                  onChange={(e) => handleFormChange("targetingType", e.target.value)}
+                />
+                <span>Product groups (with tabs)</span>
+              </label>
+            </s-stack>
+          </div>
+
+          {/* Description for each targeting type */}
+          {form.targetingType === "ALL_PRODUCTS" && (
+            <s-text color="subdued">
+              Add-ons will appear on all product pages in your store.
+            </s-text>
+          )}
+
+          {/* Specific products/collections UI */}
+          {form.targetingType === "SPECIFIC_PRODUCTS" && (
+            <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
+              <s-stack direction="block" gap="base">
+                <s-text variant="headingSm">Selected products and collections</s-text>
+                <s-text color="subdued">
+                  Add-ons will only appear on these specific products or products in these collections.
+                </s-text>
+
+                <s-stack direction="inline" gap="tight">
+                  <button
+                    style={{ padding: "8px 16px", borderRadius: "8px", border: "1px solid #8c9196", backgroundColor: "#fff", cursor: "pointer", fontSize: "14px" }}
+                    onClick={() => openTargetedResourcePicker("product")}
+                  >
+                    Add products
+                  </button>
+                  <button
+                    style={{ padding: "8px 16px", borderRadius: "8px", border: "1px solid #8c9196", backgroundColor: "#fff", cursor: "pointer", fontSize: "14px" }}
+                    onClick={() => openTargetedResourcePicker("collection")}
+                  >
+                    Add collections
+                  </button>
+                </s-stack>
+
+                {targetedItems.length === 0 ? (
+                  <s-text color="subdued" variant="bodySm">
+                    No products or collections selected yet.
+                  </s-text>
+                ) : (
+                  <s-stack direction="block" gap="tight">
+                    {targetedItems.map((item) => (
+                      <s-box key={item.id} padding="tight" borderWidth="base" borderRadius="base">
+                        <s-stack direction="inline" gap="tight">
+                          <s-badge tone={item.shopifyResourceType === "Product" ? "info" : "success"}>
+                            {item.shopifyResourceType}
+                          </s-badge>
+                          <s-text style={{ flex: 1 }}>{item.title || item.shopifyResourceId}</s-text>
+                          <button
+                            style={{ background: "none", border: "none", color: "#d72c0d", cursor: "pointer", fontSize: "14px" }}
+                            onClick={() => handleRemoveTargetedItem(item.id)}
+                          >
+                            Remove
+                          </button>
+                        </s-stack>
+                      </s-box>
+                    ))}
+                  </s-stack>
+                )}
+              </s-stack>
+            </s-box>
+          )}
+
+          {/* Product groups UI */}
+          {form.targetingType === "PRODUCT_GROUPS" && (
+            <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
+              <s-stack direction="block" gap="base">
+                <s-text variant="headingSm">Product groups</s-text>
+                <s-text color="subdued">
+                  Create groups of products. Each group will appear as a tab in the widget.
+                </s-text>
+
+                {/* Create new group */}
+                <s-stack direction="inline" gap="tight">
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: "block", marginBottom: "4px", fontWeight: 500, fontSize: "14px" }}>New group name</label>
+                    <input
+                      type="text"
+                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #8c9196", fontSize: "14px", backgroundColor: "#fff" }}
+                      value={newGroupTitle}
+                      onChange={(e) => setNewGroupTitle(e.target.value)}
+                      placeholder="e.g., Accessories"
+                    />
+                  </div>
+                  <button
+                    style={{ padding: "8px 16px", borderRadius: "8px", border: "1px solid #8c9196", backgroundColor: "#fff", cursor: "pointer", fontSize: "14px", alignSelf: "flex-end" }}
+                    onClick={handleCreateProductGroup}
+                    disabled={!newGroupTitle.trim()}
+                  >
+                    Create group
+                  </button>
+                </s-stack>
+
+                {/* Existing groups */}
+                {productGroups.length === 0 ? (
+                  <s-text color="subdued" variant="bodySm">
+                    No product groups created yet.
+                  </s-text>
+                ) : (
+                  <s-stack direction="block" gap="base">
+                    {productGroups.map((group) => (
+                      <s-box key={group.id} padding="base" borderWidth="base" borderRadius="base">
+                        <s-stack direction="block" gap="tight">
+                          <s-stack direction="inline" gap="tight">
+                            <s-text variant="headingSm" style={{ flex: 1 }}>{group.title}</s-text>
+                            <button
+                              style={{ background: "none", border: "none", color: "#2c6ecb", cursor: "pointer", fontSize: "14px" }}
+                              onClick={() => openGroupResourcePicker(group.id)}
+                            >
+                              Add products
+                            </button>
+                            <button
+                              style={{ background: "none", border: "none", color: "#d72c0d", cursor: "pointer", fontSize: "14px" }}
+                              onClick={() => handleDeleteProductGroup(group.id, group.title)}
+                            >
+                              Delete group
+                            </button>
+                          </s-stack>
+
+                          {group.items.length === 0 ? (
+                            <s-text color="subdued" variant="bodySm">
+                              No products in this group.
+                            </s-text>
+                          ) : (
+                            <s-stack direction="inline" gap="tight" wrap>
+                              {group.items.map((item) => (
+                                <s-box key={item.id} padding="tight" borderWidth="base" borderRadius="base">
+                                  <s-stack direction="inline" gap="tight">
+                                    <s-text variant="bodySm">{item.title || "Product"}</s-text>
+                                    <button
+                                      style={{ background: "none", border: "none", color: "#d72c0d", cursor: "pointer", fontSize: "14px" }}
+                                      onClick={() => handleRemoveProductGroupItem(item.id)}
+                                    >
+                                      ×
+                                    </button>
+                                  </s-stack>
+                                </s-box>
+                              ))}
+                            </s-stack>
+                          )}
+                        </s-stack>
+                      </s-box>
+                    ))}
+                  </s-stack>
+                )}
+              </s-stack>
+            </s-box>
+          )}
+        </s-stack>
+      </s-section>
+
+      {/* Discount Combinations Section */}
+      <s-section heading="Discount combinations">
+        <s-stack direction="block" gap="base">
+          <div>
+            <label style={{ display: "block", marginBottom: "4px", fontWeight: 500, fontSize: "14px" }}>With product discounts</label>
+            <select
+              style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #8c9196", fontSize: "14px", backgroundColor: "#fff" }}
+              value={form.combineWithProductDiscounts}
+              onChange={(e) => handleFormChange("combineWithProductDiscounts", e.target.value)}
+            >
+              <option value="COMBINE">Combine</option>
+              <option value="NOT_COMBINE">Do not combine</option>
+            </select>
+          </div>
+          <div>
+            <label style={{ display: "block", marginBottom: "4px", fontWeight: 500, fontSize: "14px" }}>With order discounts</label>
+            <select
+              style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #8c9196", fontSize: "14px", backgroundColor: "#fff" }}
+              value={form.combineWithOrderDiscounts}
+              onChange={(e) => handleFormChange("combineWithOrderDiscounts", e.target.value)}
+            >
+              <option value="COMBINE">Combine</option>
+              <option value="NOT_COMBINE">Do not combine</option>
+            </select>
+          </div>
+          <div>
+            <label style={{ display: "block", marginBottom: "4px", fontWeight: 500, fontSize: "14px" }}>With shipping discounts</label>
+            <select
+              style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #8c9196", fontSize: "14px", backgroundColor: "#fff" }}
+              value={form.combineWithShippingDiscounts}
+              onChange={(e) => handleFormChange("combineWithShippingDiscounts", e.target.value)}
+            >
+              <option value="COMBINE">Combine</option>
+              <option value="NOT_COMBINE">Do not combine</option>
+            </select>
+          </div>
+        </s-stack>
+      </s-section>
+
+      {/* Add-ons Section */}
+      <s-section heading="Add-on products">
+        <s-stack direction="block" gap="base">
+          <s-button ref={addProductButtonRef} variant="secondary">
+            Add product
+          </s-button>
+
+          {addOnSets.length === 0 ? (
+            <s-box padding="600" textAlign="center">
+              <s-stack direction="block" gap="base">
+                <s-text>No add-on products yet</s-text>
+                <s-text color="subdued">
+                  Add products that customers can select as add-ons
+                </s-text>
+              </s-stack>
+            </s-box>
+          ) : (
             <s-stack direction="block" gap="base">
-              <div>
-                <label style={{ display: "block", marginBottom: "4px", fontWeight: 500, fontSize: "14px" }}>Layout type</label>
+              {addOnSets.map((addOn) => (
+                <AddOnSetCard
+                  key={addOn.id}
+                  addOn={addOn}
+                  onDelete={() => handleDeleteAddOn(addOn.id, addOn.productTitle || "Add-on")}
+                  onUpdate={(data) => {
+                    fetcher.submit(
+                      { intent: "updateAddOnSet", addOnSetId: addOn.id, ...data },
+                      { method: "POST" }
+                    );
+                  }}
+                  onEditVariants={() => {
+                    openVariantEditor(
+                      addOn.id,
+                      addOn.shopifyProductId,
+                      addOn.selectedVariants.map(v => v.shopifyVariantId)
+                    );
+                  }}
+                />
+              ))}
+            </s-stack>
+          )}
+        </s-stack>
+      </s-section>
+
+      {/* Preview Section with Styles Button - Aside */}
+      <s-section slot="aside" heading="Preview">
+        <s-stack direction="block" gap="base">
+          <s-button ref={stylesButtonRef} variant="secondary" style={{ width: '100%' }}>
+            Customize Styles
+          </s-button>
+          <WidgetPreview
+            bundle={bundle}
+            addOnSets={addOnSets}
+            style={style}
+          />
+        </s-stack>
+      </s-section>
+
+      {/* Styles Modal */}
+      {isStyleModalOpen && (
+        <StylesModal
+          style={style}
+          onStyleChange={handleStyleChange}
+          onClose={() => setIsStyleModalOpen(false)}
+          onSave={handleSaveStyles}
+          onReset={handleResetStyles}
+        />
+      )}
+    </s-page>
+  );
+}
+
+// Styles Modal Component
+interface StylesModalProps {
+  style: StyleState;
+  onStyleChange: (field: keyof StyleState, value: string | number) => void;
+  onClose: () => void;
+  onSave: () => void;
+  onReset: () => void;
+}
+
+function StylesModal({ style, onStyleChange, onClose, onSave, onReset }: StylesModalProps) {
+  const modalOverlayStyle: React.CSSProperties = {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1000,
+  };
+
+  const modalContentStyle: React.CSSProperties = {
+    backgroundColor: "#fff",
+    borderRadius: "12px",
+    width: "90%",
+    maxWidth: "600px",
+    maxHeight: "80vh",
+    overflow: "auto",
+    boxShadow: "0 4px 24px rgba(0, 0, 0, 0.2)",
+  };
+
+  const modalHeaderStyle: React.CSSProperties = {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "16px 20px",
+    borderBottom: "1px solid #e0e0e0",
+    position: "sticky",
+    top: 0,
+    backgroundColor: "#fff",
+    zIndex: 1,
+  };
+
+  const modalBodyStyle: React.CSSProperties = {
+    padding: "20px",
+  };
+
+  const modalFooterStyle: React.CSSProperties = {
+    display: "flex",
+    justifyContent: "space-between",
+    padding: "16px 20px",
+    borderTop: "1px solid #e0e0e0",
+    position: "sticky",
+    bottom: 0,
+    backgroundColor: "#fff",
+  };
+
+  const sectionStyle: React.CSSProperties = {
+    marginBottom: "24px",
+  };
+
+  const sectionTitleStyle: React.CSSProperties = {
+    fontSize: "14px",
+    fontWeight: 600,
+    marginBottom: "12px",
+    color: "#202223",
+  };
+
+  const fieldRowStyle: React.CSSProperties = {
+    display: "flex",
+    gap: "12px",
+    marginBottom: "12px",
+  };
+
+  const fieldStyle: React.CSSProperties = {
+    flex: 1,
+  };
+
+  const labelStyle: React.CSSProperties = {
+    display: "block",
+    marginBottom: "4px",
+    fontWeight: 500,
+    fontSize: "13px",
+    color: "#6d7175",
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    padding: "8px 12px",
+    borderRadius: "8px",
+    border: "1px solid #8c9196",
+    fontSize: "14px",
+    backgroundColor: "#fff",
+  };
+
+  const colorInputStyle: React.CSSProperties = {
+    width: "100%",
+    height: "40px",
+    padding: "4px",
+    borderRadius: "8px",
+    border: "1px solid #8c9196",
+    backgroundColor: "#fff",
+    cursor: "pointer",
+  };
+
+  return (
+    <div style={modalOverlayStyle} onClick={onClose}>
+      <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
+        <div style={modalHeaderStyle}>
+          <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 600 }}>Widget Styles</h2>
+          <button
+            onClick={onClose}
+            style={{ background: "none", border: "none", fontSize: "24px", cursor: "pointer", color: "#6d7175" }}
+          >
+            &times;
+          </button>
+        </div>
+
+        <div style={modalBodyStyle}>
+          {/* Colors Section */}
+          <div style={sectionStyle}>
+            <div style={sectionTitleStyle}>Colors</div>
+            <div style={fieldRowStyle}>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Background</label>
+                <input
+                  type="color"
+                  style={colorInputStyle}
+                  value={style.backgroundColor}
+                  onChange={(e) => onStyleChange("backgroundColor", e.target.value)}
+                />
+              </div>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Font</label>
+                <input
+                  type="color"
+                  style={colorInputStyle}
+                  value={style.fontColor}
+                  onChange={(e) => onStyleChange("fontColor", e.target.value)}
+                />
+              </div>
+            </div>
+            <div style={fieldRowStyle}>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Button</label>
+                <input
+                  type="color"
+                  style={colorInputStyle}
+                  value={style.buttonColor}
+                  onChange={(e) => onStyleChange("buttonColor", e.target.value)}
+                />
+              </div>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Button text</label>
+                <input
+                  type="color"
+                  style={colorInputStyle}
+                  value={style.buttonTextColor}
+                  onChange={(e) => onStyleChange("buttonTextColor", e.target.value)}
+                />
+              </div>
+            </div>
+            <div style={fieldRowStyle}>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Discount badge</label>
+                <input
+                  type="color"
+                  style={colorInputStyle}
+                  value={style.discountBadgeColor}
+                  onChange={(e) => onStyleChange("discountBadgeColor", e.target.value)}
+                />
+              </div>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Discount text</label>
+                <input
+                  type="color"
+                  style={colorInputStyle}
+                  value={style.discountTextColor}
+                  onChange={(e) => onStyleChange("discountTextColor", e.target.value)}
+                />
+              </div>
+            </div>
+            <div style={fieldRowStyle}>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Border color</label>
+                <input
+                  type="color"
+                  style={colorInputStyle}
+                  value={style.borderColor}
+                  onChange={(e) => onStyleChange("borderColor", e.target.value)}
+                />
+              </div>
+              <div style={fieldStyle}></div>
+            </div>
+          </div>
+
+          {/* Layout Section */}
+          <div style={sectionStyle}>
+            <div style={sectionTitleStyle}>Layout</div>
+            <div style={fieldRowStyle}>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Layout type</label>
                 <select
-                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #8c9196", fontSize: "14px", backgroundColor: "#fff" }}
+                  style={inputStyle}
                   value={style.layoutType}
-                  onChange={(e) => handleStyleChange("layoutType", e.target.value)}
+                  onChange={(e) => onStyleChange("layoutType", e.target.value)}
                 >
                   <option value="LIST">List</option>
                   <option value="GRID">Grid</option>
                 </select>
               </div>
-              <div>
-                <label style={{ display: "block", marginBottom: "4px", fontWeight: 500, fontSize: "14px" }}>Image size</label>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Image size</label>
                 <select
-                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #8c9196", fontSize: "14px", backgroundColor: "#fff" }}
+                  style={inputStyle}
                   value={style.imageSize}
-                  onChange={(e) => handleStyleChange("imageSize", e.target.value)}
+                  onChange={(e) => onStyleChange("imageSize", e.target.value)}
                 >
                   <option value="SMALL">Small</option>
                   <option value="MEDIUM">Medium</option>
                   <option value="LARGE">Large</option>
                 </select>
               </div>
-              <div>
-                <label style={{ display: "block", marginBottom: "4px", fontWeight: 500, fontSize: "14px" }}>Discount label style</label>
+            </div>
+            <div style={fieldRowStyle}>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Discount label style</label>
                 <select
-                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #8c9196", fontSize: "14px", backgroundColor: "#fff" }}
+                  style={inputStyle}
                   value={style.discountLabelStyle}
-                  onChange={(e) => handleStyleChange("discountLabelStyle", e.target.value)}
+                  onChange={(e) => onStyleChange("discountLabelStyle", e.target.value)}
                 >
                   <option value="BADGE">Badge</option>
                   <option value="HIGHLIGHTED_TEXT">Highlighted text</option>
                 </select>
               </div>
-            </s-stack>
-          </s-section>
+              <div style={fieldStyle}></div>
+            </div>
+          </div>
 
-          <s-section heading="Typography">
-            <s-stack direction="block" gap="base">
-              <s-text-field
-                type="number"
-                label="Title font size (px)"
-                value={String(style.titleFontSize)}
-                onInput={(e: Event) => handleStyleChange("titleFontSize", parseInt((e.target as HTMLInputElement).value))}
-                min="10"
-                max="32"
-              />
-              <s-text-field
-                type="number"
-                label="Subtitle font size (px)"
-                value={String(style.subtitleFontSize)}
-                onInput={(e: Event) => handleStyleChange("subtitleFontSize", parseInt((e.target as HTMLInputElement).value))}
-                min="10"
-                max="24"
-              />
-              <s-text-field
-                type="number"
-                label="Body font size (px)"
-                value={String(style.fontSize)}
-                onInput={(e: Event) => handleStyleChange("fontSize", parseInt((e.target as HTMLInputElement).value))}
-                min="10"
-                max="20"
-              />
-            </s-stack>
-          </s-section>
+          {/* Typography Section */}
+          <div style={sectionStyle}>
+            <div style={sectionTitleStyle}>Typography</div>
+            <div style={fieldRowStyle}>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Title font size (px)</label>
+                <input
+                  type="number"
+                  style={inputStyle}
+                  value={style.titleFontSize}
+                  onChange={(e) => onStyleChange("titleFontSize", parseInt(e.target.value) || 18)}
+                  min="10"
+                  max="32"
+                />
+              </div>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Subtitle font size (px)</label>
+                <input
+                  type="number"
+                  style={inputStyle}
+                  value={style.subtitleFontSize}
+                  onChange={(e) => onStyleChange("subtitleFontSize", parseInt(e.target.value) || 14)}
+                  min="10"
+                  max="24"
+                />
+              </div>
+            </div>
+            <div style={fieldRowStyle}>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Body font size (px)</label>
+                <input
+                  type="number"
+                  style={inputStyle}
+                  value={style.fontSize}
+                  onChange={(e) => onStyleChange("fontSize", parseInt(e.target.value) || 14)}
+                  min="10"
+                  max="20"
+                />
+              </div>
+              <div style={fieldStyle}></div>
+            </div>
+          </div>
 
-          <s-section heading="Spacing & Borders">
-            <s-stack direction="block" gap="base">
-              <s-text-field
-                type="number"
-                label="Border radius (px)"
-                value={String(style.borderRadius)}
-                onInput={(e: Event) => handleStyleChange("borderRadius", parseInt((e.target as HTMLInputElement).value))}
-                min="0"
-                max="24"
-              />
-              <div>
-                <label style={{ display: "block", marginBottom: "4px", fontWeight: 500, fontSize: "14px" }}>Border style</label>
+          {/* Spacing & Borders Section */}
+          <div style={sectionStyle}>
+            <div style={sectionTitleStyle}>Spacing & Borders</div>
+            <div style={fieldRowStyle}>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Border radius (px)</label>
+                <input
+                  type="number"
+                  style={inputStyle}
+                  value={style.borderRadius}
+                  onChange={(e) => onStyleChange("borderRadius", parseInt(e.target.value) || 0)}
+                  min="0"
+                  max="24"
+                />
+              </div>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Border style</label>
                 <select
-                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #8c9196", fontSize: "14px", backgroundColor: "#fff" }}
+                  style={inputStyle}
                   value={style.borderStyle}
-                  onChange={(e) => handleStyleChange("borderStyle", e.target.value)}
+                  onChange={(e) => onStyleChange("borderStyle", e.target.value)}
                 >
                   <option value="NONE">None</option>
                   <option value="SOLID">Solid</option>
@@ -1586,60 +1767,91 @@ export default function EditBundle() {
                   <option value="DOTTED">Dotted</option>
                 </select>
               </div>
-              <s-text-field
-                type="number"
-                label="Border width (px)"
-                value={String(style.borderWidth)}
-                onInput={(e: Event) => handleStyleChange("borderWidth", parseInt((e.target as HTMLInputElement).value))}
-                min="0"
-                max="5"
-              />
-              <s-text-field
-                type="number"
-                label="Padding (px)"
-                value={String(style.padding)}
-                onInput={(e: Event) => handleStyleChange("padding", parseInt((e.target as HTMLInputElement).value))}
-                min="0"
-                max="48"
-              />
-              <s-stack direction="inline" gap="base">
-                <s-text-field
+            </div>
+            <div style={fieldRowStyle}>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Border width (px)</label>
+                <input
                   type="number"
-                  label="Margin top (px)"
-                  value={String(style.marginTop)}
-                  onInput={(e: Event) => handleStyleChange("marginTop", parseInt((e.target as HTMLInputElement).value))}
+                  style={inputStyle}
+                  value={style.borderWidth}
+                  onChange={(e) => onStyleChange("borderWidth", parseInt(e.target.value) || 0)}
+                  min="0"
+                  max="5"
+                />
+              </div>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Padding (px)</label>
+                <input
+                  type="number"
+                  style={inputStyle}
+                  value={style.padding}
+                  onChange={(e) => onStyleChange("padding", parseInt(e.target.value) || 0)}
+                  min="0"
+                  max="48"
+                />
+              </div>
+            </div>
+            <div style={fieldRowStyle}>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Margin top (px)</label>
+                <input
+                  type="number"
+                  style={inputStyle}
+                  value={style.marginTop}
+                  onChange={(e) => onStyleChange("marginTop", parseInt(e.target.value) || 0)}
                   min="0"
                   max="64"
                 />
-                <s-text-field
+              </div>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Margin bottom (px)</label>
+                <input
                   type="number"
-                  label="Margin bottom (px)"
-                  value={String(style.marginBottom)}
-                  onInput={(e: Event) => handleStyleChange("marginBottom", parseInt((e.target as HTMLInputElement).value))}
+                  style={inputStyle}
+                  value={style.marginBottom}
+                  onChange={(e) => onStyleChange("marginBottom", parseInt(e.target.value) || 0)}
                   min="0"
                   max="64"
                 />
-              </s-stack>
-            </s-stack>
-          </s-section>
+              </div>
+            </div>
+          </div>
+        </div>
 
-          <s-section>
-            <s-button ref={resetStylesButtonRef} variant="tertiary">
-              Reset to defaults
-            </s-button>
-          </s-section>
-        </>
-      )}
-
-      {/* Live Preview Aside */}
-      <s-section slot="aside" heading="Preview">
-        <WidgetPreview
-          bundle={bundle}
-          addOnSets={addOnSets}
-          style={style}
-        />
-      </s-section>
-    </s-page>
+        <div style={modalFooterStyle}>
+          <button
+            onClick={onReset}
+            style={{
+              padding: "8px 16px",
+              borderRadius: "8px",
+              border: "1px solid #8c9196",
+              backgroundColor: "#fff",
+              cursor: "pointer",
+              fontSize: "14px",
+              color: "#6d7175",
+            }}
+          >
+            Reset to defaults
+          </button>
+          <button
+            onClick={onSave}
+            style={{
+              padding: "8px 24px",
+              borderRadius: "8px",
+              border: "none",
+              backgroundColor: "#008060",
+              color: "#fff",
+              cursor: "pointer",
+              fontSize: "14px",
+              fontWeight: 500,
+            }}
+          >
+            Save Styles
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1850,17 +2062,17 @@ function AddOnSetCard({ addOn, onDelete, onUpdate, onEditVariants }: AddOnSetCar
 interface WidgetPreviewProps {
   bundle: BundleWithRelations;
   addOnSets: AddOnSetWithVariants[];
-  style: Record<string, string | number>;
+  style: StyleState;
 }
 
 function WidgetPreview({ bundle, addOnSets, style }: WidgetPreviewProps) {
   const previewStyle: React.CSSProperties = {
-    backgroundColor: style.backgroundColor as string,
-    color: style.fontColor as string,
+    backgroundColor: style.backgroundColor,
+    color: style.fontColor,
     borderRadius: `${style.borderRadius}px`,
-    borderStyle: style.borderStyle === "NONE" ? "none" : (style.borderStyle as string).toLowerCase(),
+    borderStyle: style.borderStyle === "NONE" ? "none" : style.borderStyle.toLowerCase(),
     borderWidth: `${style.borderWidth}px`,
-    borderColor: style.borderColor as string,
+    borderColor: style.borderColor,
     padding: `${style.padding}px`,
     marginTop: `${style.marginTop}px`,
     marginBottom: `${style.marginBottom}px`,
@@ -1880,8 +2092,8 @@ function WidgetPreview({ bundle, addOnSets, style }: WidgetPreviewProps) {
   };
 
   const badgeStyle: React.CSSProperties = {
-    backgroundColor: style.discountBadgeColor as string,
-    color: style.discountTextColor as string,
+    backgroundColor: style.discountBadgeColor,
+    color: style.discountTextColor,
     padding: "2px 8px",
     borderRadius: "4px",
     fontSize: "12px",

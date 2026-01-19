@@ -29,7 +29,8 @@
       "Bash(npx shopify app deploy:*)",
       "Bash(npm run typecheck:*)",
       "Bash(npm run deploy)",
-      "Bash(npm run deploy:*)"
+      "Bash(npm run deploy:*)",
+      "Bash(npm run build:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
