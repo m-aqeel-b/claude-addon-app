@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useLoaderData, useFetcher, useNavigate } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -160,6 +160,22 @@ export default function BundleList() {
   const [search, setSearch] = useState(searchQuery || "");
   const [selectedStatus, setSelectedStatus] = useState<BundleStatus | "">(statusFilter || "");
 
+  // Ref for create bundle button
+  const createBundleButtonRef = useRef<HTMLElement>(null);
+
+  const handleCreateBundle = useCallback(() => {
+    navigate("/app/bundles/new");
+  }, [navigate]);
+
+  // Attach event listener for create bundle button
+  useEffect(() => {
+    const btn = createBundleButtonRef.current;
+    if (btn) {
+      btn.addEventListener("click", handleCreateBundle);
+      return () => btn.removeEventListener("click", handleCreateBundle);
+    }
+  }, [handleCreateBundle]);
+
   useEffect(() => {
     if (fetcher.data?.action === "deleted") {
       shopify.toast.show("Bundle deleted");
@@ -202,9 +218,9 @@ export default function BundleList() {
   return (
     <s-page heading="Add-On Bundles">
       <s-button
+        ref={createBundleButtonRef}
         slot="primary-action"
         variant="primary"
-        onClick={() => navigate("/app/bundles/new")}
       >
         Create bundle
       </s-button>
@@ -277,7 +293,20 @@ export default function BundleList() {
             placeholder="Search by title..."
             style={{ flex: 1 }}
           />
-          <s-button onClick={handleSearch}>Search</s-button>
+          <button
+            onClick={handleSearch}
+            style={{
+              padding: "8px 16px",
+              borderRadius: "8px",
+              border: "1px solid #8c9196",
+              backgroundColor: "#fff",
+              cursor: "pointer",
+              fontSize: "14px",
+              fontWeight: 500,
+            }}
+          >
+            Search
+          </button>
         </s-stack>
       </s-section>
 
@@ -293,9 +322,21 @@ export default function BundleList() {
                   : "Create your first add-on bundle to get started"}
               </s-text>
               {!searchQuery && !statusFilter && (
-                <s-button variant="primary" onClick={() => navigate("/app/bundles/new")}>
+                <button
+                  onClick={() => navigate("/app/bundles/new")}
+                  style={{
+                    padding: "8px 16px",
+                    borderRadius: "8px",
+                    border: "none",
+                    backgroundColor: "#008060",
+                    color: "#fff",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                  }}
+                >
                   Create bundle
-                </s-button>
+                </button>
               )}
             </s-stack>
           </s-box>
@@ -339,25 +380,48 @@ export default function BundleList() {
                     </s-stack>
                   </s-stack>
                   <s-stack direction="inline" gap="tight">
-                    <s-button
-                      variant="secondary"
+                    <button
                       onClick={() => navigate(`/app/bundles/${bundle.id}`)}
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: "6px",
+                        border: "1px solid #8c9196",
+                        backgroundColor: "#fff",
+                        cursor: "pointer",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                      }}
                     >
                       Edit
-                    </s-button>
-                    <s-button
-                      variant="tertiary"
+                    </button>
+                    <button
                       onClick={() => handleDuplicate(bundle.id)}
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: "6px",
+                        border: "1px solid transparent",
+                        backgroundColor: "transparent",
+                        cursor: "pointer",
+                        fontSize: "13px",
+                        color: "#2c6ecb",
+                      }}
                     >
                       Duplicate
-                    </s-button>
-                    <s-button
-                      variant="tertiary"
-                      tone="critical"
+                    </button>
+                    <button
                       onClick={() => handleDelete(bundle.id, bundle.title)}
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: "6px",
+                        border: "1px solid transparent",
+                        backgroundColor: "transparent",
+                        cursor: "pointer",
+                        fontSize: "13px",
+                        color: "#d72c0d",
+                      }}
                     >
                       Delete
-                    </s-button>
+                    </button>
                   </s-stack>
                 </s-stack>
               </s-box>

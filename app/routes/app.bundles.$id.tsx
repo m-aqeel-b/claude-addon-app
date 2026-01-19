@@ -1439,6 +1439,8 @@ export default function EditBundle() {
           onClose={() => setIsStyleModalOpen(false)}
           onSave={handleSaveStyles}
           onReset={handleResetStyles}
+          bundle={bundle}
+          addOnSets={addOnSets}
         />
       )}
     </s-page>
@@ -1452,9 +1454,12 @@ interface StylesModalProps {
   onClose: () => void;
   onSave: () => void;
   onReset: () => void;
+  // Preview data
+  bundle: BundleWithRelations;
+  addOnSets: AddOnSetWithVariants[];
 }
 
-function StylesModal({ style, onStyleChange, onClose, onSave, onReset }: StylesModalProps) {
+function StylesModal({ style, onStyleChange, onClose, onSave, onReset, bundle, addOnSets }: StylesModalProps) {
   const modalOverlayStyle: React.CSSProperties = {
     position: "fixed",
     top: 0,
@@ -1471,36 +1476,51 @@ function StylesModal({ style, onStyleChange, onClose, onSave, onReset }: StylesM
   const modalContentStyle: React.CSSProperties = {
     backgroundColor: "#fff",
     borderRadius: "12px",
-    width: "90%",
-    maxWidth: "600px",
-    maxHeight: "80vh",
-    overflow: "auto",
+    width: "95%",
+    maxWidth: "1100px",
+    maxHeight: "90vh",
+    overflow: "hidden",
     boxShadow: "0 4px 24px rgba(0, 0, 0, 0.2)",
+    display: "flex",
+    flexDirection: "column",
   };
 
   const modalHeaderStyle: React.CSSProperties = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: "16px 20px",
+    padding: "16px 24px",
     borderBottom: "1px solid #e0e0e0",
-    position: "sticky",
-    top: 0,
     backgroundColor: "#fff",
-    zIndex: 1,
   };
 
   const modalBodyStyle: React.CSSProperties = {
-    padding: "20px",
+    display: "flex",
+    flex: 1,
+    overflow: "hidden",
+  };
+
+  const leftPanelStyle: React.CSSProperties = {
+    flex: "0 0 55%",
+    padding: "20px 24px",
+    overflowY: "auto",
+    borderRight: "1px solid #e0e0e0",
+  };
+
+  const rightPanelStyle: React.CSSProperties = {
+    flex: "0 0 45%",
+    padding: "20px 24px",
+    backgroundColor: "#f6f6f7",
+    overflowY: "auto",
+    display: "flex",
+    flexDirection: "column",
   };
 
   const modalFooterStyle: React.CSSProperties = {
     display: "flex",
     justifyContent: "space-between",
-    padding: "16px 20px",
+    padding: "16px 24px",
     borderTop: "1px solid #e0e0e0",
-    position: "sticky",
-    bottom: 0,
     backgroundColor: "#fff",
   };
 
@@ -1566,6 +1586,8 @@ function StylesModal({ style, onStyleChange, onClose, onSave, onReset }: StylesM
         </div>
 
         <div style={modalBodyStyle}>
+          {/* Left Panel - Style Controls */}
+          <div style={leftPanelStyle}>
           {/* Colors Section */}
           <div style={sectionStyle}>
             <div style={sectionTitleStyle}>Colors</div>
@@ -1808,6 +1830,22 @@ function StylesModal({ style, onStyleChange, onClose, onSave, onReset }: StylesM
               </div>
             </div>
           </div>
+          </div>
+
+          {/* Right Panel - Live Preview */}
+          <div style={rightPanelStyle}>
+            <div style={{ marginBottom: "12px" }}>
+              <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 600, color: "#202223" }}>Live Preview</h3>
+              <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#6d7175" }}>See how your widget will look</p>
+            </div>
+            <div style={{ flex: 1, display: "flex", alignItems: "flex-start" }}>
+              <StylesModalPreview
+                bundle={bundle}
+                addOnSets={addOnSets}
+                style={style}
+              />
+            </div>
+          </div>
         </div>
 
         <div style={modalFooterStyle}>
@@ -1842,6 +1880,99 @@ function StylesModal({ style, onStyleChange, onClose, onSave, onReset }: StylesM
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Preview component for inside the styles modal
+interface StylesModalPreviewProps {
+  bundle: BundleWithRelations;
+  addOnSets: AddOnSetWithVariants[];
+  style: StyleState;
+}
+
+function StylesModalPreview({ bundle, addOnSets, style }: StylesModalPreviewProps) {
+  const previewStyle: React.CSSProperties = {
+    backgroundColor: style.backgroundColor,
+    color: style.fontColor,
+    borderRadius: `${style.borderRadius}px`,
+    borderStyle: style.borderStyle === "NONE" ? "none" : style.borderStyle.toLowerCase(),
+    borderWidth: `${style.borderWidth}px`,
+    borderColor: style.borderColor,
+    padding: `${style.padding}px`,
+    fontSize: `${style.fontSize}px`,
+    width: "100%",
+  };
+
+  const titleStyle: React.CSSProperties = {
+    fontSize: `${style.titleFontSize}px`,
+    fontWeight: "bold",
+    marginBottom: "8px",
+  };
+
+  const subtitleStyle: React.CSSProperties = {
+    fontSize: `${style.subtitleFontSize}px`,
+    opacity: 0.8,
+    marginBottom: "16px",
+  };
+
+  const badgeStyle: React.CSSProperties = {
+    backgroundColor: style.discountBadgeColor,
+    color: style.discountTextColor,
+    padding: "2px 8px",
+    borderRadius: "4px",
+    fontSize: "12px",
+    marginLeft: "8px",
+  };
+
+  return (
+    <div style={previewStyle}>
+      <div style={titleStyle}>{bundle.title || "Bundle Title"}</div>
+      {bundle.subtitle && <div style={subtitleStyle}>{bundle.subtitle}</div>}
+
+      {addOnSets.length === 0 ? (
+        <div style={{ opacity: 0.6, textAlign: "center", padding: "20px" }}>
+          No add-ons configured
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: style.layoutType === "GRID" ? "row" : "column", gap: "12px", flexWrap: "wrap" }}>
+          {addOnSets.slice(0, 3).map((addOn) => (
+            <div
+              key={addOn.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "8px",
+                backgroundColor: "rgba(0,0,0,0.05)",
+                borderRadius: "4px",
+                flex: style.layoutType === "GRID" ? "1 1 45%" : "none",
+              }}
+            >
+              <input
+                type={bundle.selectionMode === "SINGLE" ? "radio" : "checkbox"}
+                defaultChecked={addOn.isDefaultSelected}
+                readOnly
+              />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 500 }}>
+                  {addOn.productTitle || "Product"}
+                  {addOn.discountValue && style.discountLabelStyle === "BADGE" && (
+                    <span style={badgeStyle}>
+                      {addOn.discountLabel || `${addOn.discountValue}% off`}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+          {addOnSets.length > 3 && (
+            <div style={{ opacity: 0.6, fontSize: "12px" }}>
+              +{addOnSets.length - 3} more add-ons
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
