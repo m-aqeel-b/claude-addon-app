@@ -557,70 +557,47 @@ export default function NewBundle() {
         </s-stack>
       </s-section>
 
-      {/* Status & Schedule Section */}
-      <s-section heading="Status & Schedule">
-        <s-stack direction="block" gap="base">
-          <s-select
-            label="Status"
-            value={form.status}
-            onInput={(e: Event) => handleChange("status", (e.target as HTMLSelectElement).value)}
-          >
-            <s-option value="DRAFT" selected={form.status === "DRAFT"}>Draft</s-option>
-            <s-option value="ACTIVE" selected={form.status === "ACTIVE"}>Active</s-option>
-          </s-select>
-
-          <s-stack direction="inline" gap="base">
-            <div style={{ flex: 1 }}>
-              <s-text variant="bodyMd" style={{ display: "block", marginBottom: "4px" }}>Start date (optional)</s-text>
-              <input
-                type="datetime-local"
-                value={form.startDate}
-                onChange={(e) => handleChange("startDate", e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "8px 12px",
-                  borderRadius: "8px",
-                  border: "1px solid #8c9196",
-                  fontSize: "14px",
-                  backgroundColor: "#fff",
-                  boxSizing: "border-box",
-                }}
-              />
-            </div>
-            <div style={{ flex: 1 }}>
-              <s-text variant="bodyMd" style={{ display: "block", marginBottom: "4px" }}>End date (optional)</s-text>
-              <input
-                type="datetime-local"
-                value={form.endDate}
-                onChange={(e) => handleChange("endDate", e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "8px 12px",
-                  borderRadius: "8px",
-                  border: errors.endDate ? "1px solid #d72c0d" : "1px solid #8c9196",
-                  fontSize: "14px",
-                  backgroundColor: "#fff",
-                  boxSizing: "border-box",
-                }}
-              />
-              {errors.endDate && (
-                <s-text variant="bodySm" color="critical" style={{ marginTop: "4px" }}>{errors.endDate}</s-text>
-              )}
-            </div>
-          </s-stack>
+      {/* Schedule Section */}
+      <s-section heading="Schedule">
+        <s-stack direction="inline" gap="base">
+          <div style={{ flex: 1 }}>
+            <s-text variant="bodyMd" style={{ display: "block", marginBottom: "4px" }}>Start date (optional)</s-text>
+            <input
+              type="datetime-local"
+              value={form.startDate}
+              onChange={(e) => handleChange("startDate", e.target.value)}
+              style={{
+                width: "100%",
+                padding: "8px 12px",
+                borderRadius: "8px",
+                border: "1px solid #8c9196",
+                fontSize: "14px",
+                backgroundColor: "#fff",
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <s-text variant="bodyMd" style={{ display: "block", marginBottom: "4px" }}>End date (optional)</s-text>
+            <input
+              type="datetime-local"
+              value={form.endDate}
+              onChange={(e) => handleChange("endDate", e.target.value)}
+              style={{
+                width: "100%",
+                padding: "8px 12px",
+                borderRadius: "8px",
+                border: errors.endDate ? "1px solid #d72c0d" : "1px solid #8c9196",
+                fontSize: "14px",
+                backgroundColor: "#fff",
+                boxSizing: "border-box",
+              }}
+            />
+            {errors.endDate && (
+              <s-text variant="bodySm" color="critical" style={{ marginTop: "4px" }}>{errors.endDate}</s-text>
+            )}
+          </div>
         </s-stack>
-      </s-section>
-
-      {/* Customer Selection Section */}
-      <s-section heading="Customer selection">
-        <s-select
-          label="Selection mode"
-          value={form.selectionMode}
-          onInput={(e: Event) => handleChange("selectionMode", (e.target as HTMLSelectElement).value)}
-        >
-          <s-option value="MULTIPLE" selected={form.selectionMode === "MULTIPLE"}>Multiple - Customers can select multiple add-ons</s-option>
-          <s-option value="SINGLE" selected={form.selectionMode === "SINGLE"}>Single - Customers can select only one add-on</s-option>
-        </s-select>
       </s-section>
 
       {/* Product Targeting Section */}
@@ -745,20 +722,35 @@ export default function NewBundle() {
         </s-stack>
       </s-section>
 
-      {/* Preview Section with Styles Button - Aside */}
-      <s-section slot="aside" heading="Preview">
-        <s-stack direction="block" gap="base">
-          <s-button ref={stylesButtonRef} variant="secondary" style={{ width: '100%' }}>
-            Customize Styles
-          </s-button>
-          <WidgetPreview
-            title={form.title}
-            subtitle={form.subtitle}
-            selectionMode={form.selectionMode}
-            addOns={addOns}
-            style={style}
-          />
-        </s-stack>
+      {/* Styles Section - Aside */}
+      <s-section slot="aside" heading="Styles">
+        <s-button ref={stylesButtonRef} variant="secondary" style={{ width: '100%' }}>
+          Customize Styles
+        </s-button>
+      </s-section>
+
+      {/* Status Section - Aside */}
+      <s-section slot="aside" heading="Status">
+        <s-select
+          label="Bundle status"
+          value={form.status}
+          onInput={(e: Event) => handleChange("status", (e.target as HTMLSelectElement).value)}
+        >
+          <s-option value="DRAFT" selected={form.status === "DRAFT"}>Draft</s-option>
+          <s-option value="ACTIVE" selected={form.status === "ACTIVE"}>Active</s-option>
+        </s-select>
+      </s-section>
+
+      {/* Customer Selection Section - Aside */}
+      <s-section slot="aside" heading="Customer selection">
+        <s-select
+          label="Selection mode"
+          value={form.selectionMode}
+          onInput={(e: Event) => handleChange("selectionMode", (e.target as HTMLSelectElement).value)}
+        >
+          <s-option value="MULTIPLE" selected={form.selectionMode === "MULTIPLE"}>Multiple - Customers can select multiple add-ons</s-option>
+          <s-option value="SINGLE" selected={form.selectionMode === "SINGLE"}>Single - Customers can select only one add-on</s-option>
+        </s-select>
       </s-section>
 
       {/* Styles Modal */}
@@ -1367,101 +1359,6 @@ function AddOnCard({ addOn, onDelete, onUpdate, onEditVariants }: AddOnCardProps
         )}
       </s-stack>
     </s-box>
-  );
-}
-
-// Widget Preview Component
-interface WidgetPreviewProps {
-  title: string;
-  subtitle: string;
-  selectionMode: SelectionMode;
-  addOns: LocalAddOn[];
-  style: StyleState;
-}
-
-function WidgetPreview({ title, subtitle, selectionMode, addOns, style }: WidgetPreviewProps) {
-  const previewStyle: React.CSSProperties = {
-    backgroundColor: style.backgroundColor,
-    color: style.fontColor,
-    borderRadius: `${style.borderRadius}px`,
-    borderStyle: style.borderStyle === "NONE" ? "none" : style.borderStyle.toLowerCase(),
-    borderWidth: `${style.borderWidth}px`,
-    borderColor: style.borderColor,
-    padding: `${style.padding}px`,
-    marginTop: `${style.marginTop}px`,
-    marginBottom: `${style.marginBottom}px`,
-    fontSize: `${style.fontSize}px`,
-  };
-
-  const titleStyle: React.CSSProperties = {
-    fontSize: `${style.titleFontSize}px`,
-    fontWeight: "bold",
-    marginBottom: "8px",
-  };
-
-  const subtitleStyle: React.CSSProperties = {
-    fontSize: `${style.subtitleFontSize}px`,
-    opacity: 0.8,
-    marginBottom: "16px",
-  };
-
-  const badgeStyle: React.CSSProperties = {
-    backgroundColor: style.discountBadgeColor,
-    color: style.discountTextColor,
-    padding: "2px 8px",
-    borderRadius: "4px",
-    fontSize: "12px",
-    marginLeft: "8px",
-  };
-
-  return (
-    <div style={previewStyle}>
-      <div style={titleStyle}>{title || "Bundle Title"}</div>
-      {subtitle && <div style={subtitleStyle}>{subtitle}</div>}
-
-      {addOns.length === 0 ? (
-        <div style={{ opacity: 0.6, textAlign: "center", padding: "20px" }}>
-          No add-ons configured
-        </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: style.layoutType === "GRID" ? "row" : "column", gap: "12px", flexWrap: "wrap" }}>
-          {addOns.slice(0, 3).map((addOn) => (
-            <div
-              key={addOn.id}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                padding: "8px",
-                backgroundColor: "rgba(0,0,0,0.05)",
-                borderRadius: "4px",
-                flex: style.layoutType === "GRID" ? "1 1 45%" : "none",
-              }}
-            >
-              <input
-                type={selectionMode === "SINGLE" ? "radio" : "checkbox"}
-                defaultChecked={addOn.isDefaultSelected}
-              />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 500 }}>
-                  {addOn.productTitle || "Product"}
-                  {addOn.discountValue && style.discountLabelStyle === "BADGE" && (
-                    <span style={badgeStyle}>
-                      {addOn.discountLabel || `${addOn.discountValue}% off`}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-          {addOns.length > 3 && (
-            <div style={{ opacity: 0.6, fontSize: "12px" }}>
-              +{addOns.length - 3} more add-ons
-            </div>
-          )}
-        </div>
-      )}
-    </div>
   );
 }
 
