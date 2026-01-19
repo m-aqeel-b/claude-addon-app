@@ -5,7 +5,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import { getBundle, updateBundle, deleteBundle, bundleTitleExists } from "../models/bundle.server";
-import type { BundleWithRelations, ProductGroupWithItems } from "../models/bundle.server";
+import type { BundleWithRelations } from "../models/bundle.server";
 import { getAddOnSets, createAddOnSet, updateAddOnSet, deleteAddOnSet, setVariantsForSet } from "../models/addOnSet.server";
 import type { AddOnSetWithVariants } from "../models/addOnSet.server";
 import { updateWidgetStyle, resetWidgetStyle, getOrCreateWidgetStyle, getWidgetStyle } from "../models/widgetStyle.server";
@@ -13,12 +13,6 @@ import {
   getTargetedItems,
   addTargetedItem,
   removeTargetedItem,
-  getProductGroups,
-  createProductGroup,
-  updateProductGroup,
-  deleteProductGroup,
-  addProductGroupItem,
-  removeProductGroupItem,
 } from "../models/targeting.server";
 import {
   buildWidgetConfig,
@@ -51,7 +45,6 @@ interface LoaderData {
   addOnSets: AddOnSetWithVariants[];
   widgetStyle: WidgetStyle;
   targetedItems: BundleTargetedItem[];
-  productGroups: ProductGroupWithItems[];
 }
 
 // Admin GraphQL client type
@@ -187,11 +180,10 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     throw new Response("Bundle not found", { status: 404 });
   }
 
-  const [addOnSetsRaw, widgetStyle, targetedItems, productGroups] = await Promise.all([
+  const [addOnSetsRaw, widgetStyle, targetedItems] = await Promise.all([
     getAddOnSets(bundleId),
     getOrCreateWidgetStyle(bundleId),
     getTargetedItems(bundleId),
-    getProductGroups(bundleId),
   ]);
 
   // Convert Decimal fields to numbers for proper JSON serialization
@@ -204,7 +196,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     })),
   }));
 
-  return { bundle, addOnSets, widgetStyle, targetedItems, productGroups };
+  return { bundle, addOnSets, widgetStyle, targetedItems };
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
@@ -334,9 +326,9 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         }
       }
 
-      // Clear product metafields if this was a SPECIFIC_PRODUCTS or PRODUCT_GROUPS bundle
-      if (bundleToDelete.targetingType === "SPECIFIC_PRODUCTS" || bundleToDelete.targetingType === "PRODUCT_GROUPS") {
-        console.log("[deleteBundle] Clearing product metafields for", bundleToDelete.targetingType, "bundle");
+      // Clear product metafields if this was a SPECIFIC_PRODUCTS bundle
+      if (bundleToDelete.targetingType === "SPECIFIC_PRODUCTS") {
+        console.log("[deleteBundle] Clearing product metafields for SPECIFIC_PRODUCTS bundle");
         try {
           // Get the targeted product IDs
           const targetedItems = await getTargetedItems(bundleId);
@@ -615,50 +607,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     return { success: true, action: "targetedItemRemoved" };
   }
 
-  // Product group operations (PRODUCT_GROUPS targeting)
-  if (intent === "createProductGroup") {
-    const title = formData.get("groupTitle") as string;
-    await createProductGroup({ bundleId, title });
-    return { success: true, action: "productGroupCreated" };
-  }
-
-  if (intent === "updateProductGroup") {
-    const groupId = formData.get("groupId") as string;
-    const title = formData.get("groupTitle") as string;
-    await updateProductGroup(groupId, { title });
-    return { success: true, action: "productGroupUpdated" };
-  }
-
-  if (intent === "deleteProductGroup") {
-    const groupId = formData.get("groupId") as string;
-    await deleteProductGroup(groupId);
-    return { success: true, action: "productGroupDeleted" };
-  }
-
-  if (intent === "addProductGroupItem") {
-    const groupId = formData.get("groupId") as string;
-    const shopifyResourceId = formData.get("shopifyResourceId") as string;
-    const shopifyResourceType = formData.get("shopifyResourceType") as "Product" | "Collection";
-    const title = formData.get("resourceTitle") as string;
-    const imageUrl = formData.get("imageUrl") as string;
-
-    await addProductGroupItem({
-      productGroupId: groupId,
-      shopifyResourceId,
-      shopifyResourceType,
-      title,
-      imageUrl: imageUrl || undefined,
-    });
-
-    return { success: true, action: "productGroupItemAdded" };
-  }
-
-  if (intent === "removeProductGroupItem") {
-    const itemId = formData.get("itemId") as string;
-    await removeProductGroupItem(itemId);
-    return { success: true, action: "productGroupItemRemoved" };
-  }
-
   // Manual sync metafields
   if (intent === "syncMetafields") {
     console.log("[Action] Manual metafield sync triggered");
@@ -676,13 +624,12 @@ function formatDateTimeLocal(date: Date | string | null): string {
 }
 
 export default function EditBundle() {
-  const { bundle, addOnSets, widgetStyle, targetedItems, productGroups } = useLoaderData<LoaderData>();
+  const { bundle, addOnSets, widgetStyle, targetedItems } = useLoaderData<LoaderData>();
   const fetcher = useFetcher();
   const navigate = useNavigate();
   const shopify = useAppBridge();
   const params = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [newGroupTitle, setNewGroupTitle] = useState("");
   const [isStyleModalOpen, setIsStyleModalOpen] = useState(false);
 
   // Show toast for bundle creation (redirected from new bundle page)
@@ -1002,41 +949,6 @@ export default function EditBundle() {
     fetcher.submit({ intent: "removeTargetedItem", itemId }, { method: "POST" });
   };
 
-  const handleCreateProductGroup = () => {
-    if (newGroupTitle.trim()) {
-      fetcher.submit({ intent: "createProductGroup", groupTitle: newGroupTitle.trim() }, { method: "POST" });
-    }
-  };
-
-  const handleDeleteProductGroup = (groupId: string, title: string) => {
-    if (confirm(`Delete group "${title}"? All products in this group will be removed.`)) {
-      fetcher.submit({ intent: "deleteProductGroup", groupId }, { method: "POST" });
-    }
-  };
-
-  const openGroupResourcePicker = async (groupId: string) => {
-    const selected = await shopify.resourcePicker({ type: "product", multiple: true });
-    if (selected && selected.length > 0) {
-      for (const resource of selected) {
-        fetcher.submit(
-          {
-            intent: "addProductGroupItem",
-            groupId,
-            shopifyResourceId: resource.id,
-            shopifyResourceType: "Product",
-            resourceTitle: resource.title,
-            imageUrl: (resource as { images?: { originalSrc?: string }[] }).images?.[0]?.originalSrc || "",
-          },
-          { method: "POST" }
-        );
-      }
-    }
-  };
-
-  const handleRemoveProductGroupItem = (itemId: string) => {
-    fetcher.submit({ intent: "removeProductGroupItem", itemId }, { method: "POST" });
-  };
-
   return (
     <s-page
       heading={bundle.title}
@@ -1164,7 +1076,6 @@ export default function EditBundle() {
           >
             <s-option value="ALL_PRODUCTS" selected={form.targetingType === "ALL_PRODUCTS"}>All products</s-option>
             <s-option value="SPECIFIC_PRODUCTS" selected={form.targetingType === "SPECIFIC_PRODUCTS"}>Specific products or collections</s-option>
-            <s-option value="PRODUCT_GROUPS" selected={form.targetingType === "PRODUCT_GROUPS"}>Product groups (with tabs)</s-option>
           </s-select>
 
           {/* Description and targeting UI based on type */}
@@ -1215,75 +1126,6 @@ export default function EditBundle() {
             </s-box>
           )}
 
-          {/* Product groups UI */}
-          {form.targetingType === "PRODUCT_GROUPS" && (
-            <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
-              <s-stack direction="block" gap="base">
-                <s-text variant="headingSm">Product groups</s-text>
-                <s-text color="subdued">
-                  Create groups of products. Each group will appear as a tab in the widget.
-                </s-text>
-
-                {/* Create new group */}
-                <s-stack direction="inline" gap="tight" align="end">
-                  <s-text-field
-                    label="New group name"
-                    value={newGroupTitle}
-                    placeholder="e.g., Accessories"
-                    onInput={(e: Event) => setNewGroupTitle((e.target as HTMLInputElement).value)}
-                    style={{ flex: 1 }}
-                  />
-                  <s-button variant="secondary" onClick={handleCreateProductGroup} disabled={!newGroupTitle.trim()}>
-                    Create group
-                  </s-button>
-                </s-stack>
-
-                {/* Existing groups */}
-                {productGroups.length === 0 ? (
-                  <s-text color="subdued" variant="bodySm">
-                    No product groups created yet.
-                  </s-text>
-                ) : (
-                  <s-stack direction="block" gap="base">
-                    {productGroups.map((group) => (
-                      <s-box key={group.id} padding="base" borderWidth="base" borderRadius="base">
-                        <s-stack direction="block" gap="tight">
-                          <s-stack direction="inline" gap="tight" align="center">
-                            <s-text variant="headingSm" style={{ flex: 1 }}>{group.title}</s-text>
-                            <s-button variant="tertiary" onClick={() => openGroupResourcePicker(group.id)}>
-                              Add products
-                            </s-button>
-                            <s-button variant="tertiary" tone="critical" onClick={() => handleDeleteProductGroup(group.id, group.title)}>
-                              Delete group
-                            </s-button>
-                          </s-stack>
-
-                          {group.items.length === 0 ? (
-                            <s-text color="subdued" variant="bodySm">
-                              No products in this group.
-                            </s-text>
-                          ) : (
-                            <s-stack direction="inline" gap="tight" wrap>
-                              {group.items.map((item) => (
-                                <s-box key={item.id} padding="tight" borderWidth="base" borderRadius="base">
-                                  <s-stack direction="inline" gap="tight" align="center">
-                                    <s-text variant="bodySm">{item.title || "Product"}</s-text>
-                                    <s-button variant="tertiary" tone="critical" onClick={() => handleRemoveProductGroupItem(item.id)}>
-                                      ×
-                                    </s-button>
-                                  </s-stack>
-                                </s-box>
-                              ))}
-                            </s-stack>
-                          )}
-                        </s-stack>
-                      </s-box>
-                    ))}
-                  </s-stack>
-                )}
-              </s-stack>
-            </s-box>
-          )}
         </s-stack>
       </s-section>
 

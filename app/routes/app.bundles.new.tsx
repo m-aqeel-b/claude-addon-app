@@ -7,7 +7,7 @@ import { authenticate } from "../shopify.server";
 import { createBundle, bundleTitleExists, getBundle } from "../models/bundle.server";
 import { createAddOnSet, setVariantsForSet } from "../models/addOnSet.server";
 import { getOrCreateWidgetStyle, updateWidgetStyle } from "../models/widgetStyle.server";
-import { addTargetedItem, createProductGroup, addProductGroupItem } from "../models/targeting.server";
+import { addTargetedItem } from "../models/targeting.server";
 import { buildWidgetConfig, syncShopMetafields, syncProductMetafields } from "../services/metafield.sync";
 import { activateBundleDiscount } from "../services/discount.sync";
 import type {
@@ -49,12 +49,6 @@ interface LocalTargetedItem {
   shopifyResourceType: "Product" | "Collection";
   title: string;
   imageUrl?: string;
-}
-
-interface LocalProductGroup {
-  id: string; // temporary local ID
-  title: string;
-  items: LocalTargetedItem[];
 }
 
 interface FormState {
@@ -158,12 +152,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const addOnsJson = formData.get("addOns") as string;
     const styleJson = formData.get("style") as string;
     const targetedItemsJson = formData.get("targetedItems") as string;
-    const productGroupsJson = formData.get("productGroups") as string;
 
     const addOns: LocalAddOn[] = addOnsJson ? JSON.parse(addOnsJson) : [];
     const style: StyleState = styleJson ? JSON.parse(styleJson) : defaultStyleState;
     const targetedItems: LocalTargetedItem[] = targetedItemsJson ? JSON.parse(targetedItemsJson) : [];
-    const productGroups: LocalProductGroup[] = productGroupsJson ? JSON.parse(productGroupsJson) : [];
 
     // Validation
     const errors: Record<string, string> = {};
@@ -241,27 +233,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         });
       }
       console.log("[createBundle] Created", targetedItems.length, "targeted items");
-    }
-
-    // Create product groups (for PRODUCT_GROUPS)
-    if (targetingType === "PRODUCT_GROUPS") {
-      for (const group of productGroups) {
-        const createdGroup = await createProductGroup({
-          bundleId: bundle.id,
-          title: group.title,
-        });
-
-        for (const item of group.items) {
-          await addProductGroupItem({
-            productGroupId: createdGroup.id,
-            shopifyResourceId: item.shopifyResourceId,
-            shopifyResourceType: item.shopifyResourceType,
-            title: item.title,
-            imageUrl: item.imageUrl,
-          });
-        }
-      }
-      console.log("[createBundle] Created", productGroups.length, "product groups");
     }
 
     // If bundle is created as ACTIVE, sync metafields and create discount
@@ -343,8 +314,6 @@ export default function NewBundle() {
   const [style, setStyle] = useState<StyleState>(defaultStyleState);
   const [addOns, setAddOns] = useState<LocalAddOn[]>([]);
   const [targetedItems, setTargetedItems] = useState<LocalTargetedItem[]>([]);
-  const [productGroups, setProductGroups] = useState<LocalProductGroup[]>([]);
-  const [newGroupTitle, setNewGroupTitle] = useState("");
 
   // Style modal state
   const [isStyleModalOpen, setIsStyleModalOpen] = useState(false);
@@ -491,53 +460,6 @@ export default function NewBundle() {
     setTargetedItems(prev => prev.filter(item => item.id !== localId));
   };
 
-  // Product group management
-  const handleCreateProductGroup = () => {
-    if (newGroupTitle.trim()) {
-      const newGroup: LocalProductGroup = {
-        id: generateLocalId(),
-        title: newGroupTitle.trim(),
-        items: [],
-      };
-      setProductGroups(prev => [...prev, newGroup]);
-      setNewGroupTitle("");
-      shopify.toast.show("Group created");
-    }
-  };
-
-  const handleDeleteProductGroup = (groupId: string) => {
-    setProductGroups(prev => prev.filter(g => g.id !== groupId));
-    shopify.toast.show("Group deleted");
-  };
-
-  const openGroupResourcePicker = async (groupId: string) => {
-    const selected = await shopify.resourcePicker({ type: "product", multiple: true });
-    if (selected && selected.length > 0) {
-      const newItems: LocalTargetedItem[] = selected.map(resource => ({
-        id: generateLocalId(),
-        shopifyResourceId: resource.id,
-        shopifyResourceType: "Product",
-        title: resource.title,
-        imageUrl: (resource as { images?: { originalSrc?: string }[] }).images?.[0]?.originalSrc,
-      }));
-
-      setProductGroups(prev => prev.map(group =>
-        group.id === groupId
-          ? { ...group, items: [...group.items, ...newItems] }
-          : group
-      ));
-      shopify.toast.show(`${selected.length} product(s) added to group`);
-    }
-  };
-
-  const removeProductGroupItem = (groupId: string, itemId: string) => {
-    setProductGroups(prev => prev.map(group =>
-      group.id === groupId
-        ? { ...group, items: group.items.filter(item => item.id !== itemId) }
-        : group
-    ));
-  };
-
   // Reset styles to defaults
   const handleResetStyles = () => {
     if (confirm("Reset all styles to defaults?")) {
@@ -561,11 +483,10 @@ export default function NewBundle() {
     formData.append("addOns", JSON.stringify(addOns));
     formData.append("style", JSON.stringify(style));
     formData.append("targetedItems", JSON.stringify(targetedItems));
-    formData.append("productGroups", JSON.stringify(productGroups));
 
     console.log("Submitting with", addOns.length, "add-ons");
     fetcher.submit(formData, { method: "POST" });
-  }, [form, addOns, style, targetedItems, productGroups, fetcher]);
+  }, [form, addOns, style, targetedItems, fetcher]);
 
   // Attach event listeners for web component buttons
   useEffect(() => {
@@ -712,7 +633,6 @@ export default function NewBundle() {
           >
             <s-option value="ALL_PRODUCTS" selected={form.targetingType === "ALL_PRODUCTS"}>All products</s-option>
             <s-option value="SPECIFIC_PRODUCTS" selected={form.targetingType === "SPECIFIC_PRODUCTS"}>Specific products or collections</s-option>
-            <s-option value="PRODUCT_GROUPS" selected={form.targetingType === "PRODUCT_GROUPS"}>Product groups (with tabs)</s-option>
           </s-select>
 
           {/* Description and targeting UI based on type */}
@@ -763,75 +683,6 @@ export default function NewBundle() {
             </s-box>
           )}
 
-          {/* Product groups UI */}
-          {form.targetingType === "PRODUCT_GROUPS" && (
-            <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
-              <s-stack direction="block" gap="base">
-                <s-text variant="headingSm">Product groups</s-text>
-                <s-text color="subdued">
-                  Create groups of products. Each group will appear as a tab in the widget.
-                </s-text>
-
-                {/* Create new group */}
-                <s-stack direction="inline" gap="tight" align="end">
-                  <s-text-field
-                    label="New group name"
-                    value={newGroupTitle}
-                    placeholder="e.g., Accessories"
-                    onInput={(e: Event) => setNewGroupTitle((e.target as HTMLInputElement).value)}
-                    style={{ flex: 1 }}
-                  />
-                  <s-button variant="secondary" onClick={handleCreateProductGroup} disabled={!newGroupTitle.trim()}>
-                    Create group
-                  </s-button>
-                </s-stack>
-
-                {/* Existing groups */}
-                {productGroups.length === 0 ? (
-                  <s-text color="subdued" variant="bodySm">
-                    No product groups created yet.
-                  </s-text>
-                ) : (
-                  <s-stack direction="block" gap="base">
-                    {productGroups.map((group) => (
-                      <s-box key={group.id} padding="base" borderWidth="base" borderRadius="base">
-                        <s-stack direction="block" gap="tight">
-                          <s-stack direction="inline" gap="tight" align="center">
-                            <s-text variant="headingSm" style={{ flex: 1 }}>{group.title}</s-text>
-                            <s-button variant="tertiary" onClick={() => openGroupResourcePicker(group.id)}>
-                              Add products
-                            </s-button>
-                            <s-button variant="tertiary" tone="critical" onClick={() => handleDeleteProductGroup(group.id)}>
-                              Delete group
-                            </s-button>
-                          </s-stack>
-
-                          {group.items.length === 0 ? (
-                            <s-text color="subdued" variant="bodySm">
-                              No products in this group.
-                            </s-text>
-                          ) : (
-                            <s-stack direction="inline" gap="tight" wrap>
-                              {group.items.map((item) => (
-                                <s-box key={item.id} padding="tight" borderWidth="base" borderRadius="base">
-                                  <s-stack direction="inline" gap="tight" align="center">
-                                    <s-text variant="bodySm">{item.title || "Product"}</s-text>
-                                    <s-button variant="tertiary" tone="critical" onClick={() => removeProductGroupItem(group.id, item.id)}>
-                                      ×
-                                    </s-button>
-                                  </s-stack>
-                                </s-box>
-                              ))}
-                            </s-stack>
-                          )}
-                        </s-stack>
-                      </s-box>
-                    ))}
-                  </s-stack>
-                )}
-              </s-stack>
-            </s-box>
-          )}
         </s-stack>
       </s-section>
 
