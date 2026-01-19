@@ -1090,118 +1090,86 @@ export default function EditBundle() {
       {/* Status & Schedule Section */}
       <s-section heading="Status & Schedule">
         <s-stack direction="block" gap="base">
-          <div>
-            <label style={{ display: "block", marginBottom: "4px", fontWeight: 500, fontSize: "14px" }}>Status</label>
-            <select
-              style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #8c9196", fontSize: "14px", backgroundColor: "#fff" }}
-              value={form.status}
-              onChange={(e) => handleFormChange("status", e.target.value)}
-            >
-              <option value="DRAFT">Draft</option>
-              <option value="ACTIVE">Active</option>
-              <option value="ARCHIVED">Archived</option>
-            </select>
-          </div>
+          <s-select
+            label="Status"
+            value={form.status}
+            onInput={(e: Event) => handleFormChange("status", (e.target as HTMLSelectElement).value)}
+          >
+            <s-option value="DRAFT" selected={form.status === "DRAFT"}>Draft</s-option>
+            <s-option value="ACTIVE" selected={form.status === "ACTIVE"}>Active</s-option>
+            <s-option value="ARCHIVED" selected={form.status === "ARCHIVED"}>Archived</s-option>
+          </s-select>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
-            <div>
-              <label style={{ display: "block", marginBottom: "4px", fontWeight: 500, fontSize: "14px" }}>Start date</label>
+          <s-stack direction="inline" gap="base">
+            <div style={{ flex: 1 }}>
+              <s-text variant="bodyMd" style={{ display: "block", marginBottom: "4px" }}>Start date (optional)</s-text>
               <input
                 type="datetime-local"
-                style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #8c9196", fontSize: "14px", backgroundColor: "#fff", boxSizing: "border-box" }}
                 value={form.startDate}
                 onChange={(e) => handleFormChange("startDate", e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #8c9196",
+                  fontSize: "14px",
+                  backgroundColor: "#fff",
+                  boxSizing: "border-box",
+                }}
               />
             </div>
-            <div>
-              <label style={{ display: "block", marginBottom: "4px", fontWeight: 500, fontSize: "14px" }}>End date</label>
+            <div style={{ flex: 1 }}>
+              <s-text variant="bodyMd" style={{ display: "block", marginBottom: "4px" }}>End date (optional)</s-text>
               <input
                 type="datetime-local"
-                style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: errors.endDate ? "1px solid #d72c0d" : "1px solid #8c9196", fontSize: "14px", backgroundColor: "#fff", boxSizing: "border-box" }}
                 value={form.endDate}
                 onChange={(e) => handleFormChange("endDate", e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  borderRadius: "8px",
+                  border: errors.endDate ? "1px solid #d72c0d" : "1px solid #8c9196",
+                  fontSize: "14px",
+                  backgroundColor: "#fff",
+                  boxSizing: "border-box",
+                }}
               />
               {errors.endDate && (
-                <span style={{ color: "#d72c0d", fontSize: "12px", marginTop: "4px", display: "block" }}>{errors.endDate}</span>
+                <s-text variant="bodySm" color="critical" style={{ marginTop: "4px" }}>{errors.endDate}</s-text>
               )}
             </div>
-          </div>
+          </s-stack>
         </s-stack>
       </s-section>
 
       {/* Selection Mode Section */}
-      <s-section heading="Selection mode">
-        <div>
-          <label style={{ display: "block", marginBottom: "8px", fontWeight: 500, fontSize: "14px" }}>How can customers select add-ons?</label>
-          <s-stack direction="block" gap="tight">
-            <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-              <input
-                type="radio"
-                name="selectionMode"
-                value="MULTIPLE"
-                checked={form.selectionMode === "MULTIPLE"}
-                onChange={(e) => handleFormChange("selectionMode", e.target.value)}
-              />
-              <span>Multiple selection (checkboxes)</span>
-            </label>
-            <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-              <input
-                type="radio"
-                name="selectionMode"
-                value="SINGLE"
-                checked={form.selectionMode === "SINGLE"}
-                onChange={(e) => handleFormChange("selectionMode", e.target.value)}
-              />
-              <span>Single selection (radio buttons)</span>
-            </label>
-          </s-stack>
-        </div>
+      <s-section heading="Customer selection">
+        <s-select
+          label="Selection mode"
+          value={form.selectionMode}
+          onInput={(e: Event) => handleFormChange("selectionMode", (e.target as HTMLSelectElement).value)}
+        >
+          <s-option value="MULTIPLE" selected={form.selectionMode === "MULTIPLE"}>Multiple - Customers can select multiple add-ons</s-option>
+          <s-option value="SINGLE" selected={form.selectionMode === "SINGLE"}>Single - Customers can select only one add-on</s-option>
+        </s-select>
       </s-section>
 
       {/* Product Targeting Section */}
       <s-section heading="Product targeting">
         <s-stack direction="block" gap="base">
-          <div>
-            <label style={{ display: "block", marginBottom: "8px", fontWeight: 500, fontSize: "14px" }}>Which products show this bundle?</label>
-            <s-stack direction="block" gap="tight">
-              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-                <input
-                  type="radio"
-                  name="targetingType"
-                  value="ALL_PRODUCTS"
-                  checked={form.targetingType === "ALL_PRODUCTS"}
-                  onChange={(e) => handleFormChange("targetingType", e.target.value)}
-                />
-                <span>All products</span>
-              </label>
-              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-                <input
-                  type="radio"
-                  name="targetingType"
-                  value="SPECIFIC_PRODUCTS"
-                  checked={form.targetingType === "SPECIFIC_PRODUCTS"}
-                  onChange={(e) => handleFormChange("targetingType", e.target.value)}
-                />
-                <span>Specific products or collections</span>
-              </label>
-              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-                <input
-                  type="radio"
-                  name="targetingType"
-                  value="PRODUCT_GROUPS"
-                  checked={form.targetingType === "PRODUCT_GROUPS"}
-                  onChange={(e) => handleFormChange("targetingType", e.target.value)}
-                />
-                <span>Product groups (with tabs)</span>
-              </label>
-            </s-stack>
-          </div>
+          <s-select
+            label="Which products should show this bundle?"
+            value={form.targetingType}
+            onInput={(e: Event) => handleFormChange("targetingType", (e.target as HTMLSelectElement).value)}
+          >
+            <s-option value="ALL_PRODUCTS" selected={form.targetingType === "ALL_PRODUCTS"}>All products</s-option>
+            <s-option value="SPECIFIC_PRODUCTS" selected={form.targetingType === "SPECIFIC_PRODUCTS"}>Specific products or collections</s-option>
+            <s-option value="PRODUCT_GROUPS" selected={form.targetingType === "PRODUCT_GROUPS"}>Product groups (with tabs)</s-option>
+          </s-select>
 
-          {/* Description for each targeting type */}
+          {/* Description and targeting UI based on type */}
           {form.targetingType === "ALL_PRODUCTS" && (
-            <s-text color="subdued">
-              Add-ons will appear on all product pages in your store.
-            </s-text>
+            <s-text color="subdued">Add-ons will appear on all product pages.</s-text>
           )}
 
           {/* Specific products/collections UI */}
@@ -1214,18 +1182,12 @@ export default function EditBundle() {
                 </s-text>
 
                 <s-stack direction="inline" gap="tight">
-                  <button
-                    style={{ padding: "8px 16px", borderRadius: "8px", border: "1px solid #8c9196", backgroundColor: "#fff", cursor: "pointer", fontSize: "14px" }}
-                    onClick={() => openTargetedResourcePicker("product")}
-                  >
+                  <s-button variant="secondary" onClick={() => openTargetedResourcePicker("product")}>
                     Add products
-                  </button>
-                  <button
-                    style={{ padding: "8px 16px", borderRadius: "8px", border: "1px solid #8c9196", backgroundColor: "#fff", cursor: "pointer", fontSize: "14px" }}
-                    onClick={() => openTargetedResourcePicker("collection")}
-                  >
+                  </s-button>
+                  <s-button variant="secondary" onClick={() => openTargetedResourcePicker("collection")}>
                     Add collections
-                  </button>
+                  </s-button>
                 </s-stack>
 
                 {targetedItems.length === 0 ? (
@@ -1236,17 +1198,14 @@ export default function EditBundle() {
                   <s-stack direction="block" gap="tight">
                     {targetedItems.map((item) => (
                       <s-box key={item.id} padding="tight" borderWidth="base" borderRadius="base">
-                        <s-stack direction="inline" gap="tight">
+                        <s-stack direction="inline" gap="tight" align="center">
                           <s-badge tone={item.shopifyResourceType === "Product" ? "info" : "success"}>
                             {item.shopifyResourceType}
                           </s-badge>
                           <s-text style={{ flex: 1 }}>{item.title || item.shopifyResourceId}</s-text>
-                          <button
-                            style={{ background: "none", border: "none", color: "#d72c0d", cursor: "pointer", fontSize: "14px" }}
-                            onClick={() => handleRemoveTargetedItem(item.id)}
-                          >
+                          <s-button variant="tertiary" tone="critical" onClick={() => handleRemoveTargetedItem(item.id)}>
                             Remove
-                          </button>
+                          </s-button>
                         </s-stack>
                       </s-box>
                     ))}
@@ -1266,24 +1225,17 @@ export default function EditBundle() {
                 </s-text>
 
                 {/* Create new group */}
-                <s-stack direction="inline" gap="tight">
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: "block", marginBottom: "4px", fontWeight: 500, fontSize: "14px" }}>New group name</label>
-                    <input
-                      type="text"
-                      style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #8c9196", fontSize: "14px", backgroundColor: "#fff" }}
-                      value={newGroupTitle}
-                      onChange={(e) => setNewGroupTitle(e.target.value)}
-                      placeholder="e.g., Accessories"
-                    />
-                  </div>
-                  <button
-                    style={{ padding: "8px 16px", borderRadius: "8px", border: "1px solid #8c9196", backgroundColor: "#fff", cursor: "pointer", fontSize: "14px", alignSelf: "flex-end" }}
-                    onClick={handleCreateProductGroup}
-                    disabled={!newGroupTitle.trim()}
-                  >
+                <s-stack direction="inline" gap="tight" align="end">
+                  <s-text-field
+                    label="New group name"
+                    value={newGroupTitle}
+                    placeholder="e.g., Accessories"
+                    onInput={(e: Event) => setNewGroupTitle((e.target as HTMLInputElement).value)}
+                    style={{ flex: 1 }}
+                  />
+                  <s-button variant="secondary" onClick={handleCreateProductGroup} disabled={!newGroupTitle.trim()}>
                     Create group
-                  </button>
+                  </s-button>
                 </s-stack>
 
                 {/* Existing groups */}
@@ -1296,20 +1248,14 @@ export default function EditBundle() {
                     {productGroups.map((group) => (
                       <s-box key={group.id} padding="base" borderWidth="base" borderRadius="base">
                         <s-stack direction="block" gap="tight">
-                          <s-stack direction="inline" gap="tight">
+                          <s-stack direction="inline" gap="tight" align="center">
                             <s-text variant="headingSm" style={{ flex: 1 }}>{group.title}</s-text>
-                            <button
-                              style={{ background: "none", border: "none", color: "#2c6ecb", cursor: "pointer", fontSize: "14px" }}
-                              onClick={() => openGroupResourcePicker(group.id)}
-                            >
+                            <s-button variant="tertiary" onClick={() => openGroupResourcePicker(group.id)}>
                               Add products
-                            </button>
-                            <button
-                              style={{ background: "none", border: "none", color: "#d72c0d", cursor: "pointer", fontSize: "14px" }}
-                              onClick={() => handleDeleteProductGroup(group.id, group.title)}
-                            >
+                            </s-button>
+                            <s-button variant="tertiary" tone="critical" onClick={() => handleDeleteProductGroup(group.id, group.title)}>
                               Delete group
-                            </button>
+                            </s-button>
                           </s-stack>
 
                           {group.items.length === 0 ? (
@@ -1320,14 +1266,11 @@ export default function EditBundle() {
                             <s-stack direction="inline" gap="tight" wrap>
                               {group.items.map((item) => (
                                 <s-box key={item.id} padding="tight" borderWidth="base" borderRadius="base">
-                                  <s-stack direction="inline" gap="tight">
+                                  <s-stack direction="inline" gap="tight" align="center">
                                     <s-text variant="bodySm">{item.title || "Product"}</s-text>
-                                    <button
-                                      style={{ background: "none", border: "none", color: "#d72c0d", cursor: "pointer", fontSize: "14px" }}
-                                      onClick={() => handleRemoveProductGroupItem(item.id)}
-                                    >
+                                    <s-button variant="tertiary" tone="critical" onClick={() => handleRemoveProductGroupItem(item.id)}>
                                       ×
-                                    </button>
+                                    </s-button>
                                   </s-stack>
                                 </s-box>
                               ))}
@@ -1347,30 +1290,21 @@ export default function EditBundle() {
       {/* Discount Combinations Section */}
       <s-section heading="Discount combinations">
         <s-stack direction="block" gap="base">
-          <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
-            <input
-              type="checkbox"
-              checked={form.combineWithProductDiscounts === "COMBINE"}
-              onChange={(e) => handleFormChange("combineWithProductDiscounts", e.target.checked ? "COMBINE" : "NOT_COMBINE")}
-            />
-            <span>Product discounts</span>
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
-            <input
-              type="checkbox"
-              checked={form.combineWithOrderDiscounts === "COMBINE"}
-              onChange={(e) => handleFormChange("combineWithOrderDiscounts", e.target.checked ? "COMBINE" : "NOT_COMBINE")}
-            />
-            <span>Order discounts</span>
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
-            <input
-              type="checkbox"
-              checked={form.combineWithShippingDiscounts === "COMBINE"}
-              onChange={(e) => handleFormChange("combineWithShippingDiscounts", e.target.checked ? "COMBINE" : "NOT_COMBINE")}
-            />
-            <span>Shipping discounts</span>
-          </label>
+          <s-checkbox
+            label="Product discounts"
+            checked={form.combineWithProductDiscounts === "COMBINE"}
+            onChange={(e: Event) => handleFormChange("combineWithProductDiscounts", (e.target as HTMLInputElement).checked ? "COMBINE" : "NOT_COMBINE")}
+          />
+          <s-checkbox
+            label="Order discounts"
+            checked={form.combineWithOrderDiscounts === "COMBINE"}
+            onChange={(e: Event) => handleFormChange("combineWithOrderDiscounts", (e.target as HTMLInputElement).checked ? "COMBINE" : "NOT_COMBINE")}
+          />
+          <s-checkbox
+            label="Shipping discounts"
+            checked={form.combineWithShippingDiscounts === "COMBINE"}
+            onChange={(e: Event) => handleFormChange("combineWithShippingDiscounts", (e.target as HTMLInputElement).checked ? "COMBINE" : "NOT_COMBINE")}
+          />
         </s-stack>
       </s-section>
 
@@ -1460,6 +1394,25 @@ interface StylesModalProps {
 }
 
 function StylesModal({ style, onStyleChange, onClose, onSave, onReset, bundle, addOnSets }: StylesModalProps) {
+  const resetButtonRef = useRef<HTMLElement>(null);
+  const saveButtonRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const resetBtn = resetButtonRef.current;
+    if (resetBtn) {
+      resetBtn.addEventListener("click", onReset);
+      return () => resetBtn.removeEventListener("click", onReset);
+    }
+  }, [onReset]);
+
+  useEffect(() => {
+    const saveBtn = saveButtonRef.current;
+    if (saveBtn) {
+      saveBtn.addEventListener("click", onSave);
+      return () => saveBtn.removeEventListener("click", onSave);
+    }
+  }, [onSave]);
+
   const modalOverlayStyle: React.CSSProperties = {
     position: "fixed",
     top: 0,
@@ -1524,48 +1477,10 @@ function StylesModal({ style, onStyleChange, onClose, onSave, onReset, bundle, a
     backgroundColor: "#fff",
   };
 
-  const sectionStyle: React.CSSProperties = {
-    marginBottom: "24px",
-  };
-
-  const sectionTitleStyle: React.CSSProperties = {
-    fontSize: "14px",
-    fontWeight: 600,
-    marginBottom: "12px",
-    color: "#202223",
-  };
-
-  const fieldRowStyle: React.CSSProperties = {
-    display: "flex",
-    gap: "12px",
-    marginBottom: "12px",
-  };
-
-  const fieldStyle: React.CSSProperties = {
-    flex: 1,
-  };
-
-  const labelStyle: React.CSSProperties = {
-    display: "block",
-    marginBottom: "4px",
-    fontWeight: 500,
-    fontSize: "13px",
-    color: "#6d7175",
-  };
-
-  const inputStyle: React.CSSProperties = {
-    width: "100%",
-    padding: "8px 12px",
-    borderRadius: "8px",
-    border: "1px solid #8c9196",
-    fontSize: "14px",
-    backgroundColor: "#fff",
-  };
-
   const colorInputStyle: React.CSSProperties = {
     width: "100%",
-    height: "40px",
-    padding: "4px",
+    height: "36px",
+    padding: "2px",
     borderRadius: "8px",
     border: "1px solid #8c9196",
     backgroundColor: "#fff",
@@ -1576,267 +1491,258 @@ function StylesModal({ style, onStyleChange, onClose, onSave, onReset, bundle, a
     <div style={modalOverlayStyle} onClick={onClose}>
       <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
         <div style={modalHeaderStyle}>
-          <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 600 }}>Widget Styles</h2>
-          <button
-            onClick={onClose}
-            style={{ background: "none", border: "none", fontSize: "24px", cursor: "pointer", color: "#6d7175" }}
-          >
-            &times;
-          </button>
+          <s-text variant="headingMd">Widget Styles</s-text>
+          <s-button variant="tertiary" onClick={onClose}>✕</s-button>
         </div>
 
         <div style={modalBodyStyle}>
           {/* Left Panel - Style Controls */}
           <div style={leftPanelStyle}>
-          {/* Colors Section */}
-          <div style={sectionStyle}>
-            <div style={sectionTitleStyle}>Colors</div>
-            <div style={fieldRowStyle}>
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Background</label>
-                <input
-                  type="color"
-                  style={colorInputStyle}
-                  value={style.backgroundColor}
-                  onChange={(e) => onStyleChange("backgroundColor", e.target.value)}
-                />
-              </div>
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Font</label>
-                <input
-                  type="color"
-                  style={colorInputStyle}
-                  value={style.fontColor}
-                  onChange={(e) => onStyleChange("fontColor", e.target.value)}
-                />
-              </div>
+            {/* Colors Section */}
+            <div style={{ marginBottom: "24px" }}>
+              <s-stack direction="block" gap="base">
+                <s-text variant="headingSm">Colors</s-text>
+                <s-stack direction="inline" gap="base">
+                  <div style={{ flex: 1 }}>
+                    <s-text variant="bodySm" color="subdued">Background</s-text>
+                    <input
+                      type="color"
+                      style={colorInputStyle}
+                      value={style.backgroundColor}
+                      onChange={(e) => onStyleChange("backgroundColor", e.target.value)}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <s-text variant="bodySm" color="subdued">Font</s-text>
+                    <input
+                      type="color"
+                      style={colorInputStyle}
+                      value={style.fontColor}
+                      onChange={(e) => onStyleChange("fontColor", e.target.value)}
+                    />
+                  </div>
+                </s-stack>
+                <s-stack direction="inline" gap="base">
+                  <div style={{ flex: 1 }}>
+                    <s-text variant="bodySm" color="subdued">Button</s-text>
+                    <input
+                      type="color"
+                      style={colorInputStyle}
+                      value={style.buttonColor}
+                      onChange={(e) => onStyleChange("buttonColor", e.target.value)}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <s-text variant="bodySm" color="subdued">Button text</s-text>
+                    <input
+                      type="color"
+                      style={colorInputStyle}
+                      value={style.buttonTextColor}
+                      onChange={(e) => onStyleChange("buttonTextColor", e.target.value)}
+                    />
+                  </div>
+                </s-stack>
+                <s-stack direction="inline" gap="base">
+                  <div style={{ flex: 1 }}>
+                    <s-text variant="bodySm" color="subdued">Discount badge</s-text>
+                    <input
+                      type="color"
+                      style={colorInputStyle}
+                      value={style.discountBadgeColor}
+                      onChange={(e) => onStyleChange("discountBadgeColor", e.target.value)}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <s-text variant="bodySm" color="subdued">Discount text</s-text>
+                    <input
+                      type="color"
+                      style={colorInputStyle}
+                      value={style.discountTextColor}
+                      onChange={(e) => onStyleChange("discountTextColor", e.target.value)}
+                    />
+                  </div>
+                </s-stack>
+                <s-stack direction="inline" gap="base">
+                  <div style={{ flex: 1 }}>
+                    <s-text variant="bodySm" color="subdued">Border color</s-text>
+                    <input
+                      type="color"
+                      style={colorInputStyle}
+                      value={style.borderColor}
+                      onChange={(e) => onStyleChange("borderColor", e.target.value)}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}></div>
+                </s-stack>
+              </s-stack>
             </div>
-            <div style={fieldRowStyle}>
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Button</label>
-                <input
-                  type="color"
-                  style={colorInputStyle}
-                  value={style.buttonColor}
-                  onChange={(e) => onStyleChange("buttonColor", e.target.value)}
-                />
-              </div>
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Button text</label>
-                <input
-                  type="color"
-                  style={colorInputStyle}
-                  value={style.buttonTextColor}
-                  onChange={(e) => onStyleChange("buttonTextColor", e.target.value)}
-                />
-              </div>
-            </div>
-            <div style={fieldRowStyle}>
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Discount badge</label>
-                <input
-                  type="color"
-                  style={colorInputStyle}
-                  value={style.discountBadgeColor}
-                  onChange={(e) => onStyleChange("discountBadgeColor", e.target.value)}
-                />
-              </div>
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Discount text</label>
-                <input
-                  type="color"
-                  style={colorInputStyle}
-                  value={style.discountTextColor}
-                  onChange={(e) => onStyleChange("discountTextColor", e.target.value)}
-                />
-              </div>
-            </div>
-            <div style={fieldRowStyle}>
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Border color</label>
-                <input
-                  type="color"
-                  style={colorInputStyle}
-                  value={style.borderColor}
-                  onChange={(e) => onStyleChange("borderColor", e.target.value)}
-                />
-              </div>
-              <div style={fieldStyle}></div>
-            </div>
-          </div>
 
-          {/* Layout Section */}
-          <div style={sectionStyle}>
-            <div style={sectionTitleStyle}>Layout</div>
-            <div style={fieldRowStyle}>
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Layout type</label>
-                <select
-                  style={inputStyle}
-                  value={style.layoutType}
-                  onChange={(e) => onStyleChange("layoutType", e.target.value)}
-                >
-                  <option value="LIST">List</option>
-                  <option value="GRID">Grid</option>
-                </select>
-              </div>
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Image size</label>
-                <select
-                  style={inputStyle}
-                  value={style.imageSize}
-                  onChange={(e) => onStyleChange("imageSize", e.target.value)}
-                >
-                  <option value="SMALL">Small</option>
-                  <option value="MEDIUM">Medium</option>
-                  <option value="LARGE">Large</option>
-                </select>
-              </div>
+            {/* Layout Section */}
+            <div style={{ marginBottom: "24px" }}>
+              <s-stack direction="block" gap="base">
+                <s-text variant="headingSm">Layout</s-text>
+                <s-stack direction="inline" gap="base">
+                  <div style={{ flex: 1 }}>
+                    <s-select
+                      label="Layout type"
+                      value={style.layoutType}
+                      onInput={(e: Event) => onStyleChange("layoutType", (e.target as HTMLSelectElement).value)}
+                    >
+                      <s-option value="LIST" selected={style.layoutType === "LIST"}>List</s-option>
+                      <s-option value="GRID" selected={style.layoutType === "GRID"}>Grid</s-option>
+                    </s-select>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <s-select
+                      label="Image size"
+                      value={style.imageSize}
+                      onInput={(e: Event) => onStyleChange("imageSize", (e.target as HTMLSelectElement).value)}
+                    >
+                      <s-option value="SMALL" selected={style.imageSize === "SMALL"}>Small</s-option>
+                      <s-option value="MEDIUM" selected={style.imageSize === "MEDIUM"}>Medium</s-option>
+                      <s-option value="LARGE" selected={style.imageSize === "LARGE"}>Large</s-option>
+                    </s-select>
+                  </div>
+                </s-stack>
+                <s-stack direction="inline" gap="base">
+                  <div style={{ flex: 1 }}>
+                    <s-select
+                      label="Discount label style"
+                      value={style.discountLabelStyle}
+                      onInput={(e: Event) => onStyleChange("discountLabelStyle", (e.target as HTMLSelectElement).value)}
+                    >
+                      <s-option value="BADGE" selected={style.discountLabelStyle === "BADGE"}>Badge</s-option>
+                      <s-option value="HIGHLIGHTED_TEXT" selected={style.discountLabelStyle === "HIGHLIGHTED_TEXT"}>Highlighted text</s-option>
+                    </s-select>
+                  </div>
+                  <div style={{ flex: 1 }}></div>
+                </s-stack>
+              </s-stack>
             </div>
-            <div style={fieldRowStyle}>
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Discount label style</label>
-                <select
-                  style={inputStyle}
-                  value={style.discountLabelStyle}
-                  onChange={(e) => onStyleChange("discountLabelStyle", e.target.value)}
-                >
-                  <option value="BADGE">Badge</option>
-                  <option value="HIGHLIGHTED_TEXT">Highlighted text</option>
-                </select>
-              </div>
-              <div style={fieldStyle}></div>
-            </div>
-          </div>
 
-          {/* Typography Section */}
-          <div style={sectionStyle}>
-            <div style={sectionTitleStyle}>Typography</div>
-            <div style={fieldRowStyle}>
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Title font size (px)</label>
-                <input
-                  type="number"
-                  style={inputStyle}
-                  value={style.titleFontSize}
-                  onChange={(e) => onStyleChange("titleFontSize", parseInt(e.target.value) || 18)}
-                  min="10"
-                  max="32"
-                />
-              </div>
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Subtitle font size (px)</label>
-                <input
-                  type="number"
-                  style={inputStyle}
-                  value={style.subtitleFontSize}
-                  onChange={(e) => onStyleChange("subtitleFontSize", parseInt(e.target.value) || 14)}
-                  min="10"
-                  max="24"
-                />
-              </div>
+            {/* Typography Section */}
+            <div style={{ marginBottom: "24px" }}>
+              <s-stack direction="block" gap="base">
+                <s-text variant="headingSm">Typography</s-text>
+                <s-stack direction="inline" gap="base">
+                  <div style={{ flex: 1 }}>
+                    <s-text-field
+                      label="Title font size (px)"
+                      type="number"
+                      value={style.titleFontSize.toString()}
+                      onInput={(e: Event) => onStyleChange("titleFontSize", parseInt((e.target as HTMLInputElement).value) || 18)}
+                      min="10"
+                      max="32"
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <s-text-field
+                      label="Subtitle font size (px)"
+                      type="number"
+                      value={style.subtitleFontSize.toString()}
+                      onInput={(e: Event) => onStyleChange("subtitleFontSize", parseInt((e.target as HTMLInputElement).value) || 14)}
+                      min="10"
+                      max="24"
+                    />
+                  </div>
+                </s-stack>
+                <s-stack direction="inline" gap="base">
+                  <div style={{ flex: 1 }}>
+                    <s-text-field
+                      label="Body font size (px)"
+                      type="number"
+                      value={style.fontSize.toString()}
+                      onInput={(e: Event) => onStyleChange("fontSize", parseInt((e.target as HTMLInputElement).value) || 14)}
+                      min="10"
+                      max="20"
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}></div>
+                </s-stack>
+              </s-stack>
             </div>
-            <div style={fieldRowStyle}>
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Body font size (px)</label>
-                <input
-                  type="number"
-                  style={inputStyle}
-                  value={style.fontSize}
-                  onChange={(e) => onStyleChange("fontSize", parseInt(e.target.value) || 14)}
-                  min="10"
-                  max="20"
-                />
-              </div>
-              <div style={fieldStyle}></div>
-            </div>
-          </div>
 
-          {/* Spacing & Borders Section */}
-          <div style={sectionStyle}>
-            <div style={sectionTitleStyle}>Spacing & Borders</div>
-            <div style={fieldRowStyle}>
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Border radius (px)</label>
-                <input
-                  type="number"
-                  style={inputStyle}
-                  value={style.borderRadius}
-                  onChange={(e) => onStyleChange("borderRadius", parseInt(e.target.value) || 0)}
-                  min="0"
-                  max="24"
-                />
-              </div>
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Border style</label>
-                <select
-                  style={inputStyle}
-                  value={style.borderStyle}
-                  onChange={(e) => onStyleChange("borderStyle", e.target.value)}
-                >
-                  <option value="NONE">None</option>
-                  <option value="SOLID">Solid</option>
-                  <option value="DASHED">Dashed</option>
-                  <option value="DOTTED">Dotted</option>
-                </select>
-              </div>
+            {/* Spacing & Borders Section */}
+            <div style={{ marginBottom: "24px" }}>
+              <s-stack direction="block" gap="base">
+                <s-text variant="headingSm">Spacing & Borders</s-text>
+                <s-stack direction="inline" gap="base">
+                  <div style={{ flex: 1 }}>
+                    <s-text-field
+                      label="Border radius (px)"
+                      type="number"
+                      value={style.borderRadius.toString()}
+                      onInput={(e: Event) => onStyleChange("borderRadius", parseInt((e.target as HTMLInputElement).value) || 0)}
+                      min="0"
+                      max="24"
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <s-select
+                      label="Border style"
+                      value={style.borderStyle}
+                      onInput={(e: Event) => onStyleChange("borderStyle", (e.target as HTMLSelectElement).value)}
+                    >
+                      <s-option value="NONE" selected={style.borderStyle === "NONE"}>None</s-option>
+                      <s-option value="SOLID" selected={style.borderStyle === "SOLID"}>Solid</s-option>
+                      <s-option value="DASHED" selected={style.borderStyle === "DASHED"}>Dashed</s-option>
+                      <s-option value="DOTTED" selected={style.borderStyle === "DOTTED"}>Dotted</s-option>
+                    </s-select>
+                  </div>
+                </s-stack>
+                <s-stack direction="inline" gap="base">
+                  <div style={{ flex: 1 }}>
+                    <s-text-field
+                      label="Border width (px)"
+                      type="number"
+                      value={style.borderWidth.toString()}
+                      onInput={(e: Event) => onStyleChange("borderWidth", parseInt((e.target as HTMLInputElement).value) || 0)}
+                      min="0"
+                      max="5"
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <s-text-field
+                      label="Padding (px)"
+                      type="number"
+                      value={style.padding.toString()}
+                      onInput={(e: Event) => onStyleChange("padding", parseInt((e.target as HTMLInputElement).value) || 0)}
+                      min="0"
+                      max="48"
+                    />
+                  </div>
+                </s-stack>
+                <s-stack direction="inline" gap="base">
+                  <div style={{ flex: 1 }}>
+                    <s-text-field
+                      label="Margin top (px)"
+                      type="number"
+                      value={style.marginTop.toString()}
+                      onInput={(e: Event) => onStyleChange("marginTop", parseInt((e.target as HTMLInputElement).value) || 0)}
+                      min="0"
+                      max="64"
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <s-text-field
+                      label="Margin bottom (px)"
+                      type="number"
+                      value={style.marginBottom.toString()}
+                      onInput={(e: Event) => onStyleChange("marginBottom", parseInt((e.target as HTMLInputElement).value) || 0)}
+                      min="0"
+                      max="64"
+                    />
+                  </div>
+                </s-stack>
+              </s-stack>
             </div>
-            <div style={fieldRowStyle}>
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Border width (px)</label>
-                <input
-                  type="number"
-                  style={inputStyle}
-                  value={style.borderWidth}
-                  onChange={(e) => onStyleChange("borderWidth", parseInt(e.target.value) || 0)}
-                  min="0"
-                  max="5"
-                />
-              </div>
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Padding (px)</label>
-                <input
-                  type="number"
-                  style={inputStyle}
-                  value={style.padding}
-                  onChange={(e) => onStyleChange("padding", parseInt(e.target.value) || 0)}
-                  min="0"
-                  max="48"
-                />
-              </div>
-            </div>
-            <div style={fieldRowStyle}>
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Margin top (px)</label>
-                <input
-                  type="number"
-                  style={inputStyle}
-                  value={style.marginTop}
-                  onChange={(e) => onStyleChange("marginTop", parseInt(e.target.value) || 0)}
-                  min="0"
-                  max="64"
-                />
-              </div>
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Margin bottom (px)</label>
-                <input
-                  type="number"
-                  style={inputStyle}
-                  value={style.marginBottom}
-                  onChange={(e) => onStyleChange("marginBottom", parseInt(e.target.value) || 0)}
-                  min="0"
-                  max="64"
-                />
-              </div>
-            </div>
-          </div>
           </div>
 
           {/* Right Panel - Live Preview */}
           <div style={rightPanelStyle}>
             <div style={{ marginBottom: "12px" }}>
-              <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 600, color: "#202223" }}>Live Preview</h3>
-              <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#6d7175" }}>See how your widget will look</p>
+              <s-text variant="headingSm">Live Preview</s-text>
+              <s-text variant="bodySm" color="subdued">See how your widget will look</s-text>
             </div>
             <div style={{ flex: 1, display: "flex", alignItems: "flex-start" }}>
               <StylesModalPreview
@@ -1849,35 +1755,12 @@ function StylesModal({ style, onStyleChange, onClose, onSave, onReset, bundle, a
         </div>
 
         <div style={modalFooterStyle}>
-          <button
-            onClick={onReset}
-            style={{
-              padding: "8px 16px",
-              borderRadius: "8px",
-              border: "1px solid #8c9196",
-              backgroundColor: "#fff",
-              cursor: "pointer",
-              fontSize: "14px",
-              color: "#6d7175",
-            }}
-          >
+          <s-button ref={resetButtonRef} variant="tertiary">
             Reset to defaults
-          </button>
-          <button
-            onClick={onSave}
-            style={{
-              padding: "8px 24px",
-              borderRadius: "8px",
-              border: "none",
-              backgroundColor: "#008060",
-              color: "#fff",
-              cursor: "pointer",
-              fontSize: "14px",
-              fontWeight: 500,
-            }}
-          >
+          </s-button>
+          <s-button ref={saveButtonRef} variant="primary">
             Save Styles
-          </button>
+          </s-button>
         </div>
       </div>
     </div>
@@ -2007,171 +1890,95 @@ function AddOnSetCard({ addOn, onDelete, onUpdate, onEditVariants }: AddOnSetCar
     });
   };
 
-  const selectStyle: React.CSSProperties = {
-    width: "100%",
-    padding: "8px 12px",
-    borderRadius: "8px",
-    border: "1px solid #8c9196",
-    fontSize: "14px",
-    backgroundColor: "#fff",
-  };
-
-  const inputStyle: React.CSSProperties = {
-    width: "100%",
-    padding: "8px 12px",
-    borderRadius: "8px",
-    border: "1px solid #8c9196",
-    fontSize: "14px",
-    backgroundColor: "#fff",
-  };
-
-  const labelStyle: React.CSSProperties = {
-    display: "block",
-    marginBottom: "4px",
-    fontWeight: 500,
-    fontSize: "14px",
-  };
-
-  const checkboxLabelStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    cursor: "pointer",
-    fontSize: "14px",
-  };
-
   return (
     <s-box padding="base" borderWidth="base" borderRadius="base">
       <s-stack direction="block" gap="base">
-        <s-stack direction="inline" gap="base">
+        <s-stack direction="inline" gap="base" align="center">
           <s-stack direction="block" gap="tight" style={{ flex: 1 }}>
             <s-text variant="headingSm">{addOn.productTitle || "Untitled product"}</s-text>
             <s-text variant="bodySm" color="subdued">
               {discountType === "FREE_GIFT" ? "Free gift" : `${discountType.replace(/_/g, " ")}${discountValue ? `: ${discountValue}` : ""}`}
             </s-text>
           </s-stack>
-          <button
-            style={{ background: "none", border: "none", color: "#2c6ecb", cursor: "pointer", fontSize: "14px" }}
-            onClick={() => setIsExpanded(!isExpanded)}
-          >
+          <s-button variant="tertiary" onClick={() => setIsExpanded(!isExpanded)}>
             {isExpanded ? "Collapse" : "Configure"}
-          </button>
-          <button
-            style={{ background: "none", border: "none", color: "#d72c0d", cursor: "pointer", fontSize: "14px" }}
-            onClick={onDelete}
-          >
+          </s-button>
+          <s-button variant="tertiary" tone="critical" onClick={onDelete}>
             Remove
-          </button>
+          </s-button>
         </s-stack>
 
         {isExpanded && (
           <s-stack direction="block" gap="base">
-            <div>
-              <label style={labelStyle}>Discount type</label>
-              <select
-                style={selectStyle}
-                value={discountType}
-                onChange={(e) => setDiscountType(e.target.value as DiscountType)}
-              >
-                <option value="PERCENTAGE">Percentage</option>
-                <option value="FIXED_AMOUNT">Fixed amount off</option>
-                <option value="FIXED_PRICE">Fixed price</option>
-                <option value="FREE_GIFT">Free gift (100% off)</option>
-              </select>
-            </div>
+            <s-select
+              label="Discount type"
+              value={discountType}
+              onInput={(e: Event) => setDiscountType((e.target as HTMLSelectElement).value as DiscountType)}
+            >
+              <s-option value="PERCENTAGE" selected={discountType === "PERCENTAGE"}>Percentage</s-option>
+              <s-option value="FIXED_AMOUNT" selected={discountType === "FIXED_AMOUNT"}>Fixed amount off</s-option>
+              <s-option value="FIXED_PRICE" selected={discountType === "FIXED_PRICE"}>Fixed price</s-option>
+              <s-option value="FREE_GIFT" selected={discountType === "FREE_GIFT"}>Free gift (100% off)</s-option>
+            </s-select>
 
             {discountType !== "FREE_GIFT" && (
-              <div>
-                <label style={labelStyle}>
-                  {discountType === "PERCENTAGE" ? "Discount percentage" : "Discount amount"}
-                </label>
-                <input
-                  type="number"
-                  style={inputStyle}
-                  value={discountValue}
-                  onChange={(e) => setDiscountValue(e.target.value)}
-                  min="0"
-                  step={discountType === "PERCENTAGE" ? "1" : "0.01"}
-                />
-              </div>
+              <s-text-field
+                label={discountType === "PERCENTAGE" ? "Discount percentage" : "Discount amount"}
+                type="number"
+                value={discountValue}
+                onInput={(e: Event) => setDiscountValue((e.target as HTMLInputElement).value)}
+                min="0"
+                step={discountType === "PERCENTAGE" ? "1" : "0.01"}
+              />
             )}
 
-            <div>
-              <label style={labelStyle}>Discount label (optional)</label>
-              <input
-                type="text"
-                style={inputStyle}
-                value={discountLabel}
-                onChange={(e) => setDiscountLabel(e.target.value)}
-                placeholder="e.g., Save 20%"
-              />
-            </div>
+            <s-text-field
+              label="Discount label (optional)"
+              value={discountLabel}
+              onInput={(e: Event) => setDiscountLabel((e.target as HTMLInputElement).value)}
+              placeholder="e.g., Save 20%"
+            />
 
-            <label style={checkboxLabelStyle}>
-              <input
-                type="checkbox"
-                checked={isDefaultSelected}
-                onChange={(e) => setIsDefaultSelected(e.target.checked)}
-                disabled={discountType === "FREE_GIFT"}
-              />
-              <span>Pre-selected by default</span>
-            </label>
+            <s-checkbox
+              label="Pre-selected by default"
+              checked={isDefaultSelected}
+              disabled={discountType === "FREE_GIFT" || undefined}
+              onChange={(e: Event) => setIsDefaultSelected((e.target as HTMLInputElement).checked)}
+            />
 
-            <label style={checkboxLabelStyle}>
-              <input
-                type="checkbox"
-                checked={subscriptionOnly}
-                onChange={(e) => setSubscriptionOnly(e.target.checked)}
-              />
-              <span>Subscription orders only</span>
-            </label>
+            <s-checkbox
+              label="Subscription orders only"
+              checked={subscriptionOnly}
+              onChange={(e: Event) => setSubscriptionOnly((e.target as HTMLInputElement).checked)}
+            />
 
-            <label style={checkboxLabelStyle}>
-              <input
-                type="checkbox"
-                checked={showQuantitySelector}
-                onChange={(e) => setShowQuantitySelector(e.target.checked)}
-              />
-              <span>Show quantity selector</span>
-            </label>
+            <s-checkbox
+              label="Show quantity selector"
+              checked={showQuantitySelector}
+              onChange={(e: Event) => setShowQuantitySelector((e.target as HTMLInputElement).checked)}
+            />
 
             {showQuantitySelector && (
-              <div>
-                <label style={labelStyle}>Maximum quantity</label>
-                <input
-                  type="number"
-                  style={inputStyle}
-                  value={maxQuantity}
-                  onChange={(e) => setMaxQuantity(parseInt(e.target.value) || 1)}
-                  min="1"
-                  max="99"
-                />
-              </div>
+              <s-text-field
+                label="Maximum quantity"
+                type="number"
+                value={maxQuantity.toString()}
+                onInput={(e: Event) => setMaxQuantity(parseInt((e.target as HTMLInputElement).value) || 1)}
+                min="1"
+                max="99"
+              />
             )}
 
             <s-stack direction="inline" gap="tight" align="center">
-              <button
-                style={{
-                  padding: "8px 16px",
-                  borderRadius: "8px",
-                  border: "1px solid #8c9196",
-                  backgroundColor: "#fff",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                }}
-                onClick={handleSave}
-              >
+              <s-button variant="secondary" onClick={handleSave}>
                 Save add-on settings
-              </button>
+              </s-button>
               <s-text variant="bodySm" color="subdued">
                 {addOn.selectedVariants.length} variant(s) included
               </s-text>
-              <button
-                style={{ background: "none", border: "none", color: "#2c6ecb", cursor: "pointer", fontSize: "14px" }}
-                onClick={onEditVariants}
-              >
+              <s-button variant="tertiary" onClick={onEditVariants}>
                 Edit variants
-              </button>
+              </s-button>
             </s-stack>
           </s-stack>
         )}
