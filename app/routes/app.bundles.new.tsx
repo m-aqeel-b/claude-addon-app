@@ -658,11 +658,11 @@ export default function NewBundle() {
             </select>
           </div>
 
-          <s-stack direction="inline" gap="base">
-            <div style={{ flex: 1 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
+            <div>
               <label style={{ display: "block", marginBottom: "4px", fontWeight: 500 }}>Start date (optional)</label>
               <input
-                type="date"
+                type="datetime-local"
                 value={form.startDate}
                 onChange={(e) => handleChange("startDate", e.target.value)}
                 style={{
@@ -672,13 +672,14 @@ export default function NewBundle() {
                   border: "1px solid #8c9196",
                   fontSize: "14px",
                   backgroundColor: "#fff",
+                  boxSizing: "border-box",
                 }}
               />
             </div>
-            <div style={{ flex: 1 }}>
+            <div>
               <label style={{ display: "block", marginBottom: "4px", fontWeight: 500 }}>End date (optional)</label>
               <input
-                type="date"
+                type="datetime-local"
                 value={form.endDate}
                 onChange={(e) => handleChange("endDate", e.target.value)}
                 style={{
@@ -688,6 +689,7 @@ export default function NewBundle() {
                   border: errors.endDate ? "1px solid #d72c0d" : "1px solid #8c9196",
                   fontSize: "14px",
                   backgroundColor: "#fff",
+                  boxSizing: "border-box",
                 }}
               />
               {errors.endDate && (
@@ -696,7 +698,7 @@ export default function NewBundle() {
                 </span>
               )}
             </div>
-          </s-stack>
+          </div>
         </s-stack>
       </s-section>
 
@@ -918,60 +920,30 @@ export default function NewBundle() {
       {/* Discount Combinations Section */}
       <s-section heading="Discount combinations">
         <s-stack direction="block" gap="base">
-          <div>
-            <label style={{ display: "block", marginBottom: "4px", fontWeight: 500 }}>With product discounts</label>
-            <select
-              value={form.combineWithProductDiscounts}
-              onChange={(e) => handleChange("combineWithProductDiscounts", e.target.value)}
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                borderRadius: "8px",
-                border: "1px solid #8c9196",
-                fontSize: "14px",
-                backgroundColor: "#fff",
-              }}
-            >
-              <option value="COMBINE">Combine</option>
-              <option value="NOT_COMBINE">Do not combine</option>
-            </select>
-          </div>
-          <div>
-            <label style={{ display: "block", marginBottom: "4px", fontWeight: 500 }}>With order discounts</label>
-            <select
-              value={form.combineWithOrderDiscounts}
-              onChange={(e) => handleChange("combineWithOrderDiscounts", e.target.value)}
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                borderRadius: "8px",
-                border: "1px solid #8c9196",
-                fontSize: "14px",
-                backgroundColor: "#fff",
-              }}
-            >
-              <option value="COMBINE">Combine</option>
-              <option value="NOT_COMBINE">Do not combine</option>
-            </select>
-          </div>
-          <div>
-            <label style={{ display: "block", marginBottom: "4px", fontWeight: 500 }}>With shipping discounts</label>
-            <select
-              value={form.combineWithShippingDiscounts}
-              onChange={(e) => handleChange("combineWithShippingDiscounts", e.target.value)}
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                borderRadius: "8px",
-                border: "1px solid #8c9196",
-                fontSize: "14px",
-                backgroundColor: "#fff",
-              }}
-            >
-              <option value="COMBINE">Combine</option>
-              <option value="NOT_COMBINE">Do not combine</option>
-            </select>
-          </div>
+          <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
+            <input
+              type="checkbox"
+              checked={form.combineWithProductDiscounts === "COMBINE"}
+              onChange={(e) => handleChange("combineWithProductDiscounts", e.target.checked ? "COMBINE" : "NOT_COMBINE")}
+            />
+            <span>Product discounts</span>
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
+            <input
+              type="checkbox"
+              checked={form.combineWithOrderDiscounts === "COMBINE"}
+              onChange={(e) => handleChange("combineWithOrderDiscounts", e.target.checked ? "COMBINE" : "NOT_COMBINE")}
+            />
+            <span>Order discounts</span>
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
+            <input
+              type="checkbox"
+              checked={form.combineWithShippingDiscounts === "COMBINE"}
+              onChange={(e) => handleChange("combineWithShippingDiscounts", e.target.checked ? "COMBINE" : "NOT_COMBINE")}
+            />
+            <span>Shipping discounts</span>
+          </label>
         </s-stack>
       </s-section>
 
