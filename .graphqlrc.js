@@ -1,12 +1,11 @@
 import fs from "fs";
-import { ApiVersion } from "@shopify/shopify-app-react-router/server";
 import { shopifyApiProject, ApiType } from "@shopify/api-codegen-preset";
 function getConfig() {
   const config = {
     projects: {
       default: shopifyApiProject({
         apiType: ApiType.Admin,
-        apiVersion: ApiVersion.October25,
+        apiVersion: "2026-04",
         documents: [
           "./app/**/*.{js,ts,jsx,tsx}",
           "./app/.server/**/*.{js,ts,jsx,tsx}",
