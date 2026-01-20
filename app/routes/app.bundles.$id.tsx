@@ -1703,19 +1703,20 @@ function StylesModal({ style, onStyleChange, onClose, onSave, onReset, bundle, a
   };
 
   const leftPanelStyle: React.CSSProperties = {
-    flex: "0 0 55%",
+    flex: "0 0 40%",
     padding: "20px 24px",
     overflowY: "auto",
     borderRight: "1px solid #e0e0e0",
   };
 
   const rightPanelStyle: React.CSSProperties = {
-    flex: "0 0 45%",
+    flex: "0 0 60%",
     padding: "20px 24px",
     backgroundColor: "#f6f6f7",
-    overflowY: "auto",
+    overflow: "hidden",
     display: "flex",
     flexDirection: "column",
+    minHeight: 0,
   };
 
   const modalFooterStyle: React.CSSProperties = {
@@ -1726,15 +1727,45 @@ function StylesModal({ style, onStyleChange, onClose, onSave, onReset, bundle, a
     backgroundColor: "#fff",
   };
 
+  const colorPickerContainerStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    marginTop: "4px",
+  };
+
   const colorInputStyle: React.CSSProperties = {
-    width: "100%",
-    height: "36px",
-    padding: "2px",
-    borderRadius: "8px",
+    width: "32px",
+    height: "32px",
+    padding: "0",
+    borderRadius: "6px",
     border: "1px solid #8c9196",
     backgroundColor: "#fff",
     cursor: "pointer",
+    flexShrink: 0,
   };
+
+  const colorCodeStyle: React.CSSProperties = {
+    fontSize: "13px",
+    fontFamily: "monospace",
+    color: "#616161",
+    textTransform: "uppercase",
+  };
+
+  const ColorPicker = ({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) => (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <s-text variant="bodySm" color="subdued">{label}</s-text>
+      <div style={colorPickerContainerStyle}>
+        <input
+          type="color"
+          style={colorInputStyle}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <span style={colorCodeStyle}>{value}</span>
+      </div>
+    </div>
+  );
 
   return (
     <div style={modalOverlayStyle} onClick={onClose}>
@@ -1749,78 +1780,22 @@ function StylesModal({ style, onStyleChange, onClose, onSave, onReset, bundle, a
           <div style={leftPanelStyle}>
             {/* Colors Section */}
             <div style={{ marginBottom: "24px" }}>
-              <s-stack direction="block" gap="base">
+              <s-stack direction="block" gap="tight">
                 <s-text variant="headingSm">Colors</s-text>
                 <s-stack direction="inline" gap="base">
-                  <div style={{ flex: 1 }}>
-                    <s-text variant="bodySm" color="subdued">Background</s-text>
-                    <input
-                      type="color"
-                      style={colorInputStyle}
-                      value={style.backgroundColor}
-                      onChange={(e) => onStyleChange("backgroundColor", e.target.value)}
-                    />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <s-text variant="bodySm" color="subdued">Font</s-text>
-                    <input
-                      type="color"
-                      style={colorInputStyle}
-                      value={style.fontColor}
-                      onChange={(e) => onStyleChange("fontColor", e.target.value)}
-                    />
-                  </div>
+                  <ColorPicker label="Background" value={style.backgroundColor} onChange={(v) => onStyleChange("backgroundColor", v)} />
+                  <ColorPicker label="Font" value={style.fontColor} onChange={(v) => onStyleChange("fontColor", v)} />
                 </s-stack>
                 <s-stack direction="inline" gap="base">
-                  <div style={{ flex: 1 }}>
-                    <s-text variant="bodySm" color="subdued">Button</s-text>
-                    <input
-                      type="color"
-                      style={colorInputStyle}
-                      value={style.buttonColor}
-                      onChange={(e) => onStyleChange("buttonColor", e.target.value)}
-                    />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <s-text variant="bodySm" color="subdued">Button text</s-text>
-                    <input
-                      type="color"
-                      style={colorInputStyle}
-                      value={style.buttonTextColor}
-                      onChange={(e) => onStyleChange("buttonTextColor", e.target.value)}
-                    />
-                  </div>
+                  <ColorPicker label="Button" value={style.buttonColor} onChange={(v) => onStyleChange("buttonColor", v)} />
+                  <ColorPicker label="Button text" value={style.buttonTextColor} onChange={(v) => onStyleChange("buttonTextColor", v)} />
                 </s-stack>
                 <s-stack direction="inline" gap="base">
-                  <div style={{ flex: 1 }}>
-                    <s-text variant="bodySm" color="subdued">Discount badge</s-text>
-                    <input
-                      type="color"
-                      style={colorInputStyle}
-                      value={style.discountBadgeColor}
-                      onChange={(e) => onStyleChange("discountBadgeColor", e.target.value)}
-                    />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <s-text variant="bodySm" color="subdued">Discount text</s-text>
-                    <input
-                      type="color"
-                      style={colorInputStyle}
-                      value={style.discountTextColor}
-                      onChange={(e) => onStyleChange("discountTextColor", e.target.value)}
-                    />
-                  </div>
+                  <ColorPicker label="Discount badge" value={style.discountBadgeColor} onChange={(v) => onStyleChange("discountBadgeColor", v)} />
+                  <ColorPicker label="Discount text" value={style.discountTextColor} onChange={(v) => onStyleChange("discountTextColor", v)} />
                 </s-stack>
                 <s-stack direction="inline" gap="base">
-                  <div style={{ flex: 1 }}>
-                    <s-text variant="bodySm" color="subdued">Border color</s-text>
-                    <input
-                      type="color"
-                      style={colorInputStyle}
-                      value={style.borderColor}
-                      onChange={(e) => onStyleChange("borderColor", e.target.value)}
-                    />
-                  </div>
+                  <ColorPicker label="Border" value={style.borderColor} onChange={(v) => onStyleChange("borderColor", v)} />
                   <div style={{ flex: 1 }}></div>
                 </s-stack>
               </s-stack>
@@ -1989,16 +1964,18 @@ function StylesModal({ style, onStyleChange, onClose, onSave, onReset, bundle, a
 
           {/* Right Panel - Live Preview */}
           <div style={rightPanelStyle}>
-            <div style={{ marginBottom: "12px" }}>
+            <div style={{ marginBottom: "12px", flexShrink: 0 }}>
               <s-text variant="headingSm">Live Preview</s-text>
               <s-text variant="bodySm" color="subdued">See how your widget will look</s-text>
             </div>
-            <div style={{ flex: 1, display: "flex", alignItems: "flex-start" }}>
-              <StylesModalPreview
-                bundle={bundle}
-                addOnSets={addOnSets}
-                style={style}
-              />
+            <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", paddingBottom: "16px" }}>
+              <div style={{ width: "100%", maxWidth: "100%", boxSizing: "border-box" }}>
+                <StylesModalPreview
+                  bundle={bundle}
+                  addOnSets={addOnSets}
+                  style={style}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -2034,6 +2011,9 @@ function StylesModalPreview({ bundle, addOnSets, style }: StylesModalPreviewProp
     padding: `${style.padding}px`,
     fontSize: `${style.fontSize}px`,
     width: "100%",
+    maxWidth: "100%",
+    boxSizing: "border-box",
+    overflow: "hidden",
   };
 
   const titleStyle: React.CSSProperties = {
