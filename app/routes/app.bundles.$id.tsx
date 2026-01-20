@@ -282,6 +282,159 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     return { success: true, action: "bundleUpdated", discountError };
   }
 
+  // Save all changes (batch save)
+  if (intent === "saveAllChanges") {
+    const title = formData.get("title") as string;
+    const subtitle = formData.get("subtitle") as string;
+    const status = formData.get("status") as BundleStatus;
+    const startDate = formData.get("startDate") as string;
+    const endDate = formData.get("endDate") as string;
+    const selectionMode = formData.get("selectionMode") as SelectionMode;
+    const targetingType = formData.get("targetingType") as TargetingType;
+    const combineWithProductDiscounts = formData.get("combineWithProductDiscounts") as DiscountCombination;
+    const combineWithOrderDiscounts = formData.get("combineWithOrderDiscounts") as DiscountCombination;
+    const combineWithShippingDiscounts = formData.get("combineWithShippingDiscounts") as DiscountCombination;
+
+    // Parse JSON data for batched changes
+    const newTargetedItems = JSON.parse(formData.get("newTargetedItems") as string || "[]");
+    const deletedTargetedItemIds = JSON.parse(formData.get("deletedTargetedItemIds") as string || "[]");
+    const newAddOnSets = JSON.parse(formData.get("newAddOnSets") as string || "[]");
+    const modifiedAddOnSets = JSON.parse(formData.get("modifiedAddOnSets") as string || "[]");
+    const deletedAddOnSetIds = JSON.parse(formData.get("deletedAddOnSetIds") as string || "[]");
+
+    // Validation
+    const errors: Record<string, string> = {};
+
+    if (!title || title.trim().length === 0) {
+      errors.title = "Title is required";
+    } else if (title.length > 100) {
+      errors.title = "Title must be 100 characters or less";
+    } else if (await bundleTitleExists(shop, title, bundleId)) {
+      errors.title = "A bundle with this title already exists";
+    }
+
+    if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
+      errors.endDate = "End date must be after start date";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      return { errors };
+    }
+
+    // 1. Update bundle basic info
+    await updateBundle(bundleId, shop, {
+      title: title.trim(),
+      subtitle: subtitle.trim() || null,
+      status,
+      startDate: startDate ? new Date(startDate) : null,
+      endDate: endDate ? new Date(endDate) : null,
+      selectionMode,
+      targetingType,
+      combineWithProductDiscounts,
+      combineWithOrderDiscounts,
+      combineWithShippingDiscounts,
+    });
+
+    // 2. Process deleted targeted items
+    for (const itemId of deletedTargetedItemIds) {
+      await removeTargetedItem(itemId);
+    }
+
+    // 3. Process new targeted items
+    for (const item of newTargetedItems) {
+      await addTargetedItem({
+        bundleId,
+        shopifyResourceId: item.shopifyResourceId,
+        shopifyResourceType: item.shopifyResourceType,
+        title: item.title,
+        imageUrl: item.imageUrl || null,
+      });
+    }
+
+    // 4. Process deleted add-on sets
+    for (const addOnSetId of deletedAddOnSetIds) {
+      await deleteAddOnSet(addOnSetId);
+    }
+
+    // 5. Process new add-on sets
+    for (const addOn of newAddOnSets) {
+      const newAddOnSet = await createAddOnSet({
+        bundleId,
+        shopifyProductId: addOn.shopifyProductId,
+        productTitle: addOn.productTitle,
+        productImageUrl: addOn.productImageUrl,
+        discountType: addOn.discountType as DiscountType,
+        discountValue: addOn.discountValue,
+        discountLabel: addOn.discountLabel,
+        isDefaultSelected: addOn.isDefaultSelected,
+        subscriptionOnly: addOn.subscriptionOnly,
+        showQuantitySelector: addOn.showQuantitySelector,
+        maxQuantity: addOn.maxQuantity,
+      });
+
+      // Create variants for the new add-on
+      if (addOn.selectedVariants && addOn.selectedVariants.length > 0) {
+        await setVariantsForSet(newAddOnSet.id, addOn.selectedVariants.map((v: { shopifyVariantId: string; variantTitle: string | null; variantSku: string | null; variantPrice: number | null }) => ({
+          shopifyVariantId: v.shopifyVariantId,
+          variantTitle: v.variantTitle,
+          variantSku: v.variantSku,
+          variantPrice: v.variantPrice,
+        })));
+      }
+    }
+
+    // 6. Process modified add-on sets
+    for (const addOn of modifiedAddOnSets) {
+      await updateAddOnSet(addOn.id, {
+        discountType: addOn.discountType as DiscountType,
+        discountValue: addOn.discountValue,
+        discountLabel: addOn.discountLabel,
+        isDefaultSelected: addOn.isDefaultSelected,
+        subscriptionOnly: addOn.subscriptionOnly,
+        showQuantitySelector: addOn.showQuantitySelector,
+        maxQuantity: addOn.maxQuantity,
+      });
+
+      // Update variants if changed
+      if (addOn.selectedVariants) {
+        await setVariantsForSet(addOn.id, addOn.selectedVariants.map((v: { shopifyVariantId: string; variantTitle: string | null; variantSku: string | null; variantPrice: number | null }) => ({
+          shopifyVariantId: v.shopifyVariantId,
+          variantTitle: v.variantTitle,
+          variantSku: v.variantSku,
+          variantPrice: v.variantPrice,
+        })));
+      }
+    }
+
+    // 7. Sync metafields after all changes
+    await syncBundleMetafields(admin, bundleId, shop);
+
+    // 8. Manage Shopify discount based on status
+    const updatedBundle = await getBundle(bundleId, shop);
+    let discountError: string | null = null;
+
+    if (updatedBundle) {
+      try {
+        if (status === "ACTIVE") {
+          console.log("[saveAllChanges] Activating discount for bundle:", bundleId);
+          const discountResult = await activateBundleDiscount(admin, shop, updatedBundle);
+          if (discountResult.errors.length > 0) {
+            console.error("[saveAllChanges] Discount errors:", discountResult.errors);
+            discountError = discountResult.errors.map(e => e.message).join(", ");
+          }
+        } else {
+          console.log("[saveAllChanges] Deactivating discount for bundle:", bundleId);
+          await deactivateBundleDiscount(admin, shop, updatedBundle);
+        }
+      } catch (error) {
+        console.error("[saveAllChanges] Error managing discount:", error);
+        discountError = error instanceof Error ? error.message : "Unknown discount error";
+      }
+    }
+
+    return { success: true, action: "bundleUpdated", discountError };
+  }
+
   // Delete bundle
   if (intent === "deleteBundle") {
     console.log("[deleteBundle] Starting delete for bundle:", bundleId);
@@ -396,8 +549,12 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         `#graphql
         query GetProductVariants($id: ID!) {
           product(id: $id) {
-            featuredImage {
-              url
+            featuredMedia {
+              preview {
+                image {
+                  url
+                }
+              }
             }
             variants(first: 100) {
               nodes {
@@ -414,11 +571,11 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
       const productResult = await productQuery.json();
       const productData = productResult.data?.product as {
-        featuredImage?: { url?: string };
+        featuredMedia?: { preview?: { image?: { url?: string } } };
         variants?: { nodes?: Array<{ id: string; title: string; sku?: string; price?: string }> };
       } | undefined;
 
-      productImageUrl = productData?.featuredImage?.url;
+      productImageUrl = productData?.featuredMedia?.preview?.image?.url;
 
       // Only use fetched variants if none were provided from picker
       if (variants.length === 0 && productData?.variants?.nodes) {
@@ -623,16 +780,94 @@ function formatDateTimeLocal(date: Date | string | null): string {
   return d.toISOString().slice(0, 16);
 }
 
+// Local types for tracking changes
+interface LocalTargetedItem {
+  id: string;
+  shopifyResourceId: string;
+  shopifyResourceType: "Product" | "Collection";
+  title: string;
+  imageUrl?: string;
+  isNew?: boolean; // Track if this is a new item not yet saved
+}
+
+interface LocalAddOnSet {
+  id: string;
+  shopifyProductId: string;
+  productTitle: string | null;
+  productImageUrl: string | null;
+  discountType: string;
+  discountValue: number | null;
+  discountLabel: string | null;
+  isDefaultSelected: boolean;
+  subscriptionOnly: boolean;
+  showQuantitySelector: boolean;
+  maxQuantity: number;
+  selectedVariants: Array<{
+    id: string;
+    shopifyVariantId: string;
+    variantTitle: string | null;
+    variantSku: string | null;
+    variantPrice: number | null;
+  }>;
+  isNew?: boolean; // Track if this is a new item not yet saved
+  isModified?: boolean; // Track if this item has been modified
+}
+
 export default function EditBundle() {
-  const { bundle, addOnSets, widgetStyle, targetedItems } = useLoaderData<LoaderData>();
+  const { bundle, addOnSets: initialAddOnSets, widgetStyle, targetedItems: initialTargetedItems } = useLoaderData<LoaderData>();
   const fetcher = useFetcher();
   const navigate = useNavigate();
   const shopify = useAppBridge();
   const params = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const [isStyleModalOpen, setIsStyleModalOpen] = useState(false);
-  const [targetedItemToDelete, setTargetedItemToDelete] = useState<BundleTargetedItem | null>(null);
+  const [targetedItemToDelete, setTargetedItemToDelete] = useState<LocalTargetedItem | null>(null);
   const [isDeleteBundleModalOpen, setIsDeleteBundleModalOpen] = useState(false);
+  const [showEndDate, setShowEndDate] = useState(!!bundle.endDate);
+
+  // Local state for targeted items (changes only saved on Save button click)
+  const [localTargetedItems, setLocalTargetedItems] = useState<LocalTargetedItem[]>(
+    initialTargetedItems.map(item => ({
+      id: item.id,
+      shopifyResourceId: item.shopifyResourceId,
+      shopifyResourceType: item.shopifyResourceType as "Product" | "Collection",
+      title: item.title || "",
+      imageUrl: item.imageUrl || undefined,
+    }))
+  );
+  const [deletedTargetedItemIds, setDeletedTargetedItemIds] = useState<string[]>([]);
+
+  // Local state for add-on sets (changes only saved on Save button click)
+  const [localAddOnSets, setLocalAddOnSets] = useState<LocalAddOnSet[]>(
+    initialAddOnSets.map(addOn => ({
+      id: addOn.id,
+      shopifyProductId: addOn.shopifyProductId,
+      productTitle: addOn.productTitle,
+      productImageUrl: addOn.productImageUrl,
+      discountType: addOn.discountType,
+      discountValue: addOn.discountValue ? Number(addOn.discountValue) : null,
+      discountLabel: addOn.discountLabel,
+      isDefaultSelected: addOn.isDefaultSelected,
+      subscriptionOnly: addOn.subscriptionOnly,
+      showQuantitySelector: addOn.showQuantitySelector,
+      maxQuantity: addOn.maxQuantity,
+      selectedVariants: addOn.selectedVariants.map(v => ({
+        id: v.id,
+        shopifyVariantId: v.shopifyVariantId,
+        variantTitle: v.variantTitle,
+        variantSku: v.variantSku,
+        variantPrice: v.variantPrice ? Number(v.variantPrice) : null,
+      })),
+    }))
+  );
+  const [deletedAddOnSetIds, setDeletedAddOnSetIds] = useState<string[]>([]);
+
+  // Track if there are unsaved changes
+  const hasUnsavedChanges =
+    deletedTargetedItemIds.length > 0 ||
+    deletedAddOnSetIds.length > 0 ||
+    localTargetedItems.some(item => item.isNew) ||
+    localAddOnSets.some(addOn => addOn.isNew || addOn.isModified);
 
   // Show toast for bundle creation (redirected from new bundle page)
   useEffect(() => {
@@ -705,15 +940,15 @@ export default function EditBundle() {
       } else {
         shopify.toast.show("Bundle saved & synced to store");
       }
+      // Reset local state tracking after successful save
+      setDeletedTargetedItemIds([]);
+      setDeletedAddOnSetIds([]);
+      // Reset isNew and isModified flags
+      setLocalTargetedItems(prev => prev.map(item => ({ ...item, isNew: false })));
+      setLocalAddOnSets(prev => prev.map(addOn => ({ ...addOn, isNew: false, isModified: false })));
     } else if (fetcher.data?.action === "bundleDeleted") {
       shopify.toast.show("Bundle deleted");
       navigate("/app/bundles");
-    } else if (fetcher.data?.action === "addOnCreated") {
-      shopify.toast.show("Add-on added & synced to store");
-    } else if (fetcher.data?.action === "addOnUpdated") {
-      shopify.toast.show("Add-on saved & synced to store");
-    } else if (fetcher.data?.action === "addOnDeleted") {
-      shopify.toast.show("Add-on removed & synced to store");
     } else if (fetcher.data?.action === "styleUpdated") {
       shopify.toast.show("Styles saved & synced to store");
       setIsStyleModalOpen(false);
@@ -742,14 +977,8 @@ export default function EditBundle() {
         discountLabelStyle: "BADGE",
       });
       setIsStyleModalOpen(false);
-    } else if (fetcher.data?.action === "targetedItemAdded") {
-      shopify.toast.show("Product/collection added & synced");
-    } else if (fetcher.data?.action === "targetedItemRemoved") {
-      shopify.toast.show("Product/collection removed & synced");
     } else if (fetcher.data?.action === "metafieldsSynced") {
       shopify.toast.show("Force synced to store");
-    } else if (fetcher.data?.action === "variantsUpdated") {
-      shopify.toast.show("Variants updated & synced to store");
     }
   }, [fetcher.data, shopify, navigate]);
 
@@ -762,8 +991,26 @@ export default function EditBundle() {
   };
 
   const handleSaveBundle = useCallback(() => {
-    fetcher.submit({ intent: "updateBundle", ...form }, { method: "POST" });
-  }, [fetcher, form]);
+    // Prepare all changes to be saved
+    const newTargetedItems = localTargetedItems.filter(item => item.isNew);
+    const newAddOnSets = localAddOnSets.filter(addOn => addOn.isNew);
+    const modifiedAddOnSets = localAddOnSets.filter(addOn => addOn.isModified && !addOn.isNew);
+
+    fetcher.submit(
+      {
+        intent: "saveAllChanges",
+        ...form,
+        // Targeted items changes
+        newTargetedItems: JSON.stringify(newTargetedItems),
+        deletedTargetedItemIds: JSON.stringify(deletedTargetedItemIds),
+        // Add-on sets changes
+        newAddOnSets: JSON.stringify(newAddOnSets),
+        modifiedAddOnSets: JSON.stringify(modifiedAddOnSets),
+        deletedAddOnSetIds: JSON.stringify(deletedAddOnSetIds),
+      },
+      { method: "POST" }
+    );
+  }, [fetcher, form, localTargetedItems, localAddOnSets, deletedTargetedItemIds, deletedAddOnSetIds]);
 
   const handleDeleteBundle = useCallback(() => {
     setIsDeleteBundleModalOpen(true);
@@ -777,8 +1024,9 @@ export default function EditBundle() {
   const handleToggleStatus = useCallback(() => {
     const newStatus = form.status === "ARCHIVED" ? "ACTIVE" : "ARCHIVED";
     setForm((prev) => ({ ...prev, status: newStatus }));
-    fetcher.submit({ intent: "updateBundle", ...form, status: newStatus }, { method: "POST" });
-  }, [fetcher, form]);
+    // Don't auto-save, just update local state - will be saved when user clicks Save
+    shopify.toast.show(`Status changed to ${newStatus === "ARCHIVED" ? "Deactivated" : "Active"} - click Save to apply`);
+  }, [form, shopify]);
 
   const handleSaveStyles = useCallback(() => {
     fetcher.submit(
@@ -798,9 +1046,15 @@ export default function EditBundle() {
     }
   }, [fetcher]);
 
-  const handleDeleteAddOn = (addOnSetId: string, title: string) => {
-    if (confirm(`Remove "${title}" from this bundle?`)) {
-      fetcher.submit({ intent: "deleteAddOnSet", addOnSetId }, { method: "POST" });
+  const handleDeleteAddOn = (addOnSetId: string) => {
+    const addOn = localAddOnSets.find(a => a.id === addOnSetId);
+    if (addOn?.isNew) {
+      // If it's a new item that hasn't been saved yet, just remove from local state
+      setLocalAddOnSets(prev => prev.filter(a => a.id !== addOnSetId));
+    } else {
+      // Mark for deletion (will be deleted when Save is clicked)
+      setLocalAddOnSets(prev => prev.filter(a => a.id !== addOnSetId));
+      setDeletedAddOnSetIds(prev => [...prev, addOnSetId]);
     }
   };
 
@@ -824,26 +1078,43 @@ export default function EditBundle() {
         }>;
       };
 
+      // Check if product already exists in local add-ons
+      const existingAddOn = localAddOnSets.find(a => a.shopifyProductId === product.id);
+      if (existingAddOn) {
+        shopify.toast.show("This product is already added as an add-on");
+        return;
+      }
+
       // Get the selected variants from the picker (if any)
       const selectedVariants = product.variants || [];
 
-      fetcher.submit(
-        {
-          intent: "createAddOnSet",
-          shopifyProductId: product.id,
-          productTitle: product.title,
-          // Pass selected variants from the picker
-          selectedVariants: JSON.stringify(selectedVariants.map(v => ({
-            shopifyVariantId: v.id,
-            variantTitle: v.title,
-            variantSku: v.sku || null,
-            variantPrice: v.price ? parseFloat(v.price) : null,
-          }))),
-        },
-        { method: "POST" }
-      );
+      // Add to local state (will be saved when Save is clicked)
+      const newAddOn: LocalAddOnSet = {
+        id: `new-${Date.now()}`, // Temporary ID for new items
+        shopifyProductId: product.id,
+        productTitle: product.title,
+        productImageUrl: product.images?.[0]?.originalSrc || null,
+        discountType: "PERCENTAGE",
+        discountValue: null,
+        discountLabel: null,
+        isDefaultSelected: false,
+        subscriptionOnly: false,
+        showQuantitySelector: false,
+        maxQuantity: 1,
+        selectedVariants: selectedVariants.map(v => ({
+          id: `new-variant-${v.id}`,
+          shopifyVariantId: v.id,
+          variantTitle: v.title,
+          variantSku: v.sku || null,
+          variantPrice: v.price ? parseFloat(v.price) : null,
+        })),
+        isNew: true,
+      };
+
+      setLocalAddOnSets(prev => [...prev, newAddOn]);
+      shopify.toast.show("Add-on added - click Save to apply");
     }
-  }, [shopify, fetcher]);
+  }, [shopify, localAddOnSets]);
 
   // Edit variants for an existing add-on
   const openVariantEditor = useCallback(async (addOnSetId: string, productId: string, currentVariantIds: string[]) => {
@@ -868,22 +1139,27 @@ export default function EditBundle() {
       const selectedVariants = product.variants || [];
 
       if (selectedVariants.length > 0) {
-        fetcher.submit(
-          {
-            intent: "updateAddOnSetVariants",
-            addOnSetId,
-            selectedVariants: JSON.stringify(selectedVariants.map(v => ({
-              shopifyVariantId: v.id,
-              variantTitle: v.title,
-              variantSku: v.sku || null,
-              variantPrice: v.price ? parseFloat(v.price) : null,
-            }))),
-          },
-          { method: "POST" }
-        );
+        // Update local state (will be saved when Save is clicked)
+        setLocalAddOnSets(prev => prev.map(addOn => {
+          if (addOn.id === addOnSetId) {
+            return {
+              ...addOn,
+              selectedVariants: selectedVariants.map(v => ({
+                id: `new-variant-${v.id}`,
+                shopifyVariantId: v.id,
+                variantTitle: v.title,
+                variantSku: v.sku || null,
+                variantPrice: v.price ? parseFloat(v.price) : null,
+              })),
+              isModified: !addOn.isNew, // Mark as modified if not new
+            };
+          }
+          return addOn;
+        }));
+        shopify.toast.show("Variants updated - click Save to apply");
       }
     }
-  }, [shopify, fetcher]);
+  }, [shopify]);
 
   // Attach event listeners for web component buttons
   useEffect(() => {
@@ -939,23 +1215,42 @@ export default function EditBundle() {
   const openTargetedResourcePicker = async (type: "product" | "collection") => {
     const selected = await shopify.resourcePicker({ type, multiple: true });
     if (selected && selected.length > 0) {
-      for (const resource of selected) {
-        fetcher.submit(
-          {
-            intent: "addTargetedItem",
-            shopifyResourceId: resource.id,
-            shopifyResourceType: type === "product" ? "Product" : "Collection",
-            resourceTitle: resource.title,
-            imageUrl: (resource as { images?: { originalSrc?: string }[] }).images?.[0]?.originalSrc || "",
-          },
-          { method: "POST" }
-        );
+      // Filter out items that are already in the local list
+      const existingIds = new Set(localTargetedItems.map(item => item.shopifyResourceId));
+      const newItems = selected.filter(resource => !existingIds.has(resource.id));
+      const skippedCount = selected.length - newItems.length;
+
+      if (skippedCount > 0) {
+        shopify.toast.show(`${skippedCount} item(s) already added, skipped`);
+      }
+
+      if (newItems.length > 0) {
+        // Add to local state (will be saved when Save is clicked)
+        const newLocalItems: LocalTargetedItem[] = newItems.map(resource => ({
+          id: `new-${Date.now()}-${resource.id}`,
+          shopifyResourceId: resource.id,
+          shopifyResourceType: type === "product" ? "Product" : "Collection",
+          title: resource.title,
+          imageUrl: (resource as { images?: { originalSrc?: string }[] }).images?.[0]?.originalSrc,
+          isNew: true,
+        }));
+
+        setLocalTargetedItems(prev => [...prev, ...newLocalItems]);
+        shopify.toast.show(`${newItems.length} ${type}(s) added - click Save to apply`);
       }
     }
   };
 
   const handleRemoveTargetedItem = (itemId: string) => {
-    fetcher.submit({ intent: "removeTargetedItem", itemId }, { method: "POST" });
+    const item = localTargetedItems.find(i => i.id === itemId);
+    if (item?.isNew) {
+      // If it's a new item that hasn't been saved yet, just remove from local state
+      setLocalTargetedItems(prev => prev.filter(i => i.id !== itemId));
+    } else {
+      // Mark for deletion (will be deleted when Save is clicked)
+      setLocalTargetedItems(prev => prev.filter(i => i.id !== itemId));
+      setDeletedTargetedItemIds(prev => [...prev, itemId]);
+    }
   };
 
   return (
@@ -969,6 +1264,14 @@ export default function EditBundle() {
         variant="secondary"
       >
         {form.status === "ARCHIVED" ? "Activate" : "Deactivate"}
+      </s-button>
+      <s-button
+        ref={syncButtonRef}
+        slot="secondary-action"
+        variant="secondary"
+        title="Force sync to store (normally not needed - saves auto-sync)"
+      >
+        Force Sync
       </s-button>
       <s-button
         ref={deleteButtonRef}
@@ -985,16 +1288,6 @@ export default function EditBundle() {
         {...(isSubmitting ? { loading: true } : {})}
       >
         Save
-      </s-button>
-
-      {/* Force Sync Button - for debugging, normally not needed */}
-      <s-button
-        ref={syncButtonRef}
-        slot="secondary-action"
-        variant="tertiary"
-        title="Force sync to store (normally not needed - saves auto-sync)"
-      >
-        Force Sync
       </s-button>
 
       {/* Basic Information Section */}
@@ -1036,23 +1329,51 @@ export default function EditBundle() {
             />
           </div>
           <div style={{ flex: 1 }}>
-            <s-text variant="bodyMd" style={{ display: "block", marginBottom: "4px" }}>End date (optional)</s-text>
-            <input
-              type="datetime-local"
-              value={form.endDate}
-              onChange={(e) => handleFormChange("endDate", e.target.value)}
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                borderRadius: "8px",
-                border: errors.endDate ? "1px solid #d72c0d" : "1px solid #8c9196",
-                fontSize: "14px",
-                backgroundColor: "#fff",
-                boxSizing: "border-box",
-              }}
-            />
-            {errors.endDate && (
-              <s-text variant="bodySm" color="critical" style={{ marginTop: "4px" }}>{errors.endDate}</s-text>
+            {!showEndDate ? (
+              <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", height: "100%" }}>
+                <s-checkbox
+                  checked={showEndDate}
+                  onChange={(e: Event) => {
+                    const checked = (e.target as HTMLInputElement).checked;
+                    setShowEndDate(checked);
+                  }}
+                  label="Set End Date"
+                />
+              </div>
+            ) : (
+              <div>
+                <s-text variant="bodyMd" style={{ display: "block", marginBottom: "4px" }}>End date</s-text>
+                <input
+                  type="datetime-local"
+                  value={form.endDate}
+                  onChange={(e) => handleFormChange("endDate", e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    borderRadius: "8px",
+                    border: errors.endDate ? "1px solid #d72c0d" : "1px solid #8c9196",
+                    fontSize: "14px",
+                    backgroundColor: "#fff",
+                    boxSizing: "border-box",
+                  }}
+                />
+                {errors.endDate && (
+                  <s-text variant="bodySm" color="critical" style={{ marginTop: "4px" }}>{errors.endDate}</s-text>
+                )}
+                <div style={{ marginTop: "8px" }}>
+                  <s-checkbox
+                    checked={showEndDate}
+                    onChange={(e: Event) => {
+                      const checked = (e.target as HTMLInputElement).checked;
+                      setShowEndDate(checked);
+                      if (!checked) {
+                        handleFormChange("endDate", "");
+                      }
+                    }}
+                    label="Set End Date"
+                  />
+                </div>
+              </div>
             )}
           </div>
         </s-stack>
@@ -1095,14 +1416,14 @@ export default function EditBundle() {
                   Add-ons will only appear on these specific products or products in these collections.
                 </s-text>
 
-                {targetedItems.length === 0 ? (
+                {localTargetedItems.length === 0 ? (
                   <s-text color="subdued" variant="bodySm">
                     No products or collections selected yet.
                   </s-text>
                 ) : (
                   <s-stack direction="block" gap="tight">
-                    {targetedItems.map((item) => (
-                      <s-box key={item.id} padding="base" borderWidth="base" borderRadius="base" background="default">
+                    {localTargetedItems.map((item) => (
+                      <s-box key={item.id} padding="base" borderWidth="base" borderRadius="base" background={item.isNew ? "warning" : "default"}>
                         <div style={{ display: "flex", alignItems: "center", gap: "12px", width: "100%" }}>
                           {/* Image */}
                           {item.imageUrl ? (
@@ -1142,6 +1463,7 @@ export default function EditBundle() {
                               <s-badge tone={item.shopifyResourceType === "Product" ? "info" : "success"}>
                                 {item.shopifyResourceType}
                               </s-badge>
+                              {item.isNew && <s-badge tone="warning">Unsaved</s-badge>}
                             </s-stack>
                           </div>
                           {/* Remove button - at far right end */}
@@ -1167,7 +1489,7 @@ export default function EditBundle() {
             Add product
           </s-button>
 
-          {addOnSets.length === 0 ? (
+          {localAddOnSets.length === 0 ? (
             <s-box padding="600" textAlign="center">
               <s-stack direction="block" gap="base">
                 <s-text>No add-on products yet</s-text>
@@ -1178,16 +1500,31 @@ export default function EditBundle() {
             </s-box>
           ) : (
             <s-stack direction="block" gap="base">
-              {addOnSets.map((addOn) => (
+              {localAddOnSets.map((addOn) => (
                 <AddOnSetCard
                   key={addOn.id}
                   addOn={addOn}
-                  onDelete={() => handleDeleteAddOn(addOn.id, addOn.productTitle || "Add-on")}
+                  isUnsaved={addOn.isNew || addOn.isModified}
+                  onDelete={() => handleDeleteAddOn(addOn.id)}
                   onUpdate={(data) => {
-                    fetcher.submit(
-                      { intent: "updateAddOnSet", addOnSetId: addOn.id, ...data },
-                      { method: "POST" }
-                    );
+                    // Update local state (will be saved when Save is clicked)
+                    setLocalAddOnSets(prev => prev.map(a => {
+                      if (a.id === addOn.id) {
+                        return {
+                          ...a,
+                          discountType: data.discountType || a.discountType,
+                          discountValue: data.discountValue ? parseFloat(data.discountValue) : a.discountValue,
+                          discountLabel: data.discountLabel || a.discountLabel,
+                          isDefaultSelected: data.isDefaultSelected === "true",
+                          subscriptionOnly: data.subscriptionOnly === "true",
+                          showQuantitySelector: data.showQuantitySelector === "true",
+                          maxQuantity: data.maxQuantity ? parseInt(data.maxQuantity) : a.maxQuantity,
+                          isModified: !a.isNew, // Mark as modified if not new
+                        };
+                      }
+                      return a;
+                    }));
+                    shopify.toast.show("Add-on updated - click Save to apply");
                   }}
                   onEditVariants={() => {
                     openVariantEditor(
@@ -1265,7 +1602,7 @@ export default function EditBundle() {
           onSave={handleSaveStyles}
           onReset={handleResetStyles}
           bundle={bundle}
-          addOnSets={addOnSets}
+          addOnSets={initialAddOnSets}
         />
       )}
 
@@ -1774,13 +2111,14 @@ function StylesModalPreview({ bundle, addOnSets, style }: StylesModalPreviewProp
 
 // Add-On Set Card Component
 interface AddOnSetCardProps {
-  addOn: AddOnSetWithVariants;
+  addOn: LocalAddOnSet;
+  isUnsaved?: boolean;
   onDelete: () => void;
   onUpdate: (data: Record<string, string>) => void;
   onEditVariants: () => void;
 }
 
-function AddOnSetCard({ addOn, onDelete, onUpdate, onEditVariants }: AddOnSetCardProps) {
+function AddOnSetCard({ addOn, isUnsaved, onDelete, onUpdate, onEditVariants }: AddOnSetCardProps) {
   const [isConfigureModalOpen, setIsConfigureModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
@@ -1842,8 +2180,9 @@ function AddOnSetCard({ addOn, onDelete, onUpdate, onEditVariants }: AddOnSetCar
           {/* Product Title and Discount Info */}
           <div style={{ flex: 1 }}>
             <s-text variant="headingSm">{addOn.productTitle || "Untitled product"}</s-text>
-            <div style={{ marginTop: "4px" }}>
+            <div style={{ marginTop: "4px", display: "flex", gap: "8px", alignItems: "center" }}>
               <span style={discountBadgeStyle}>{getDiscountText()}</span>
+              {isUnsaved && <s-badge tone="warning">Unsaved</s-badge>}
             </div>
           </div>
 
@@ -1886,7 +2225,7 @@ function AddOnSetCard({ addOn, onDelete, onUpdate, onEditVariants }: AddOnSetCar
 
 // Configure Add-On Set Modal Component
 interface ConfigureAddOnSetModalProps {
-  addOn: AddOnSetWithVariants;
+  addOn: LocalAddOnSet;
   onUpdate: (data: Record<string, string>) => void;
   onEditVariants: () => void;
   onClose: () => void;
@@ -2137,7 +2476,7 @@ function DeleteAddOnConfirmModal({ productTitle, onConfirm, onCancel }: DeleteAd
 
 // Delete Targeted Item Confirmation Modal
 interface DeleteTargetedItemModalProps {
-  item: BundleTargetedItem;
+  item: LocalTargetedItem;
   onConfirm: () => void;
   onCancel: () => void;
 }

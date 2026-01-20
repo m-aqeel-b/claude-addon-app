@@ -314,6 +314,7 @@ export default function NewBundle() {
   const [style, setStyle] = useState<StyleState>(defaultStyleState);
   const [addOns, setAddOns] = useState<LocalAddOn[]>([]);
   const [targetedItems, setTargetedItems] = useState<LocalTargetedItem[]>([]);
+  const [showEndDate, setShowEndDate] = useState(false);
 
   // Style modal state
   const [isStyleModalOpen, setIsStyleModalOpen] = useState(false);
@@ -446,16 +447,27 @@ export default function NewBundle() {
   const openTargetedResourcePicker = async (type: "product" | "collection") => {
     const selected = await shopify.resourcePicker({ type, multiple: true });
     if (selected && selected.length > 0) {
-      const newItems: LocalTargetedItem[] = selected.map(resource => ({
-        id: generateLocalId(),
-        shopifyResourceId: resource.id,
-        shopifyResourceType: type === "product" ? "Product" : "Collection",
-        title: resource.title,
-        imageUrl: (resource as { images?: { originalSrc?: string }[] }).images?.[0]?.originalSrc,
-      }));
+      // Filter out items that are already in the list
+      const existingIds = new Set(targetedItems.map(item => item.shopifyResourceId));
+      const filteredSelected = selected.filter(resource => !existingIds.has(resource.id));
+      const skippedCount = selected.length - filteredSelected.length;
 
-      setTargetedItems(prev => [...prev, ...newItems]);
-      shopify.toast.show(`${selected.length} ${type}(s) added`);
+      if (skippedCount > 0) {
+        shopify.toast.show(`${skippedCount} item(s) already added, skipped`);
+      }
+
+      if (filteredSelected.length > 0) {
+        const newItems: LocalTargetedItem[] = filteredSelected.map(resource => ({
+          id: generateLocalId(),
+          shopifyResourceId: resource.id,
+          shopifyResourceType: type === "product" ? "Product" : "Collection",
+          title: resource.title,
+          imageUrl: (resource as { images?: { originalSrc?: string }[] }).images?.[0]?.originalSrc,
+        }));
+
+        setTargetedItems(prev => [...prev, ...newItems]);
+        shopify.toast.show(`${filteredSelected.length} ${type}(s) added`);
+      }
     }
   };
 
@@ -581,23 +593,51 @@ export default function NewBundle() {
             />
           </div>
           <div style={{ flex: 1 }}>
-            <s-text variant="bodyMd" style={{ display: "block", marginBottom: "4px" }}>End date (optional)</s-text>
-            <input
-              type="datetime-local"
-              value={form.endDate}
-              onChange={(e) => handleChange("endDate", e.target.value)}
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                borderRadius: "8px",
-                border: errors.endDate ? "1px solid #d72c0d" : "1px solid #8c9196",
-                fontSize: "14px",
-                backgroundColor: "#fff",
-                boxSizing: "border-box",
-              }}
-            />
-            {errors.endDate && (
-              <s-text variant="bodySm" color="critical" style={{ marginTop: "4px" }}>{errors.endDate}</s-text>
+            {!showEndDate ? (
+              <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", height: "100%" }}>
+                <s-checkbox
+                  checked={showEndDate}
+                  onChange={(e: Event) => {
+                    const checked = (e.target as HTMLInputElement).checked;
+                    setShowEndDate(checked);
+                  }}
+                  label="Set End Date"
+                />
+              </div>
+            ) : (
+              <div>
+                <s-text variant="bodyMd" style={{ display: "block", marginBottom: "4px" }}>End date</s-text>
+                <input
+                  type="datetime-local"
+                  value={form.endDate}
+                  onChange={(e) => handleChange("endDate", e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    borderRadius: "8px",
+                    border: errors.endDate ? "1px solid #d72c0d" : "1px solid #8c9196",
+                    fontSize: "14px",
+                    backgroundColor: "#fff",
+                    boxSizing: "border-box",
+                  }}
+                />
+                {errors.endDate && (
+                  <s-text variant="bodySm" color="critical" style={{ marginTop: "4px" }}>{errors.endDate}</s-text>
+                )}
+                <div style={{ marginTop: "8px" }}>
+                  <s-checkbox
+                    checked={showEndDate}
+                    onChange={(e: Event) => {
+                      const checked = (e.target as HTMLInputElement).checked;
+                      setShowEndDate(checked);
+                      if (!checked) {
+                        handleChange("endDate", "");
+                      }
+                    }}
+                    label="Set End Date"
+                  />
+                </div>
+              </div>
             )}
           </div>
         </s-stack>
