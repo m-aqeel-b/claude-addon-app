@@ -20,6 +20,7 @@ import type {
   ImageSize,
   DiscountLabelStyle,
   BorderStyle,
+  WidgetTemplate,
 } from "@prisma/client";
 
 // Local state types for managing data before submission
@@ -62,9 +63,11 @@ interface FormState {
   combineWithProductDiscounts: DiscountCombination;
   combineWithOrderDiscounts: DiscountCombination;
   combineWithShippingDiscounts: DiscountCombination;
+  deleteAddOnsWithMain: boolean;
 }
 
 interface StyleState {
+  template: WidgetTemplate;
   backgroundColor: string;
   fontColor: string;
   buttonColor: string;
@@ -84,6 +87,7 @@ interface StyleState {
   marginBottom: number;
   imageSize: ImageSize;
   discountLabelStyle: DiscountLabelStyle;
+  showCountdownTimer: boolean;
 }
 
 const defaultFormState: FormState = {
@@ -97,9 +101,11 @@ const defaultFormState: FormState = {
   combineWithProductDiscounts: "COMBINE",
   combineWithOrderDiscounts: "COMBINE",
   combineWithShippingDiscounts: "COMBINE",
+  deleteAddOnsWithMain: false,
 };
 
 const defaultStyleState: StyleState = {
+  template: "DEFAULT",
   backgroundColor: "#ffffff",
   fontColor: "#000000",
   buttonColor: "#000000",
@@ -119,6 +125,7 @@ const defaultStyleState: StyleState = {
   marginBottom: 16,
   imageSize: "MEDIUM",
   discountLabelStyle: "BADGE",
+  showCountdownTimer: false,
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -147,6 +154,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const combineWithProductDiscounts = (formData.get("combineWithProductDiscounts") as DiscountCombination) || "COMBINE";
     const combineWithOrderDiscounts = (formData.get("combineWithOrderDiscounts") as DiscountCombination) || "COMBINE";
     const combineWithShippingDiscounts = (formData.get("combineWithShippingDiscounts") as DiscountCombination) || "COMBINE";
+    const deleteAddOnsWithMain = formData.get("deleteAddOnsWithMain") === "true";
 
     // Parse add-ons, styles, targeting from JSON
     const addOnsJson = formData.get("addOns") as string;
@@ -189,6 +197,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       combineWithProductDiscounts,
       combineWithOrderDiscounts,
       combineWithShippingDiscounts,
+      deleteAddOnsWithMain,
     });
 
     console.log("[createBundle] Bundle created:", bundle.id);
@@ -336,11 +345,11 @@ export default function NewBundle() {
     }
   }, [fetcher.data, shopify]);
 
-  const handleChange = (field: keyof FormState, value: string) => {
+  const handleChange = (field: keyof FormState, value: string | boolean) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleStyleChange = (field: keyof StyleState, value: string | number) => {
+  const handleStyleChange = (field: keyof StyleState, value: string | number | boolean) => {
     setStyle((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -407,7 +416,7 @@ export default function NewBundle() {
     shopify.toast.show("Add-on removed");
   };
 
-  // Edit variants for an add-on
+  // Edit variants for an add-on (also allows changing the product itself)
   const openVariantEditor = useCallback(async (localId: string, productId: string, currentVariantIds: string[]) => {
     const selected = await shopify.resourcePicker({
       type: "product",
@@ -419,6 +428,8 @@ export default function NewBundle() {
     if (selected && selected.length > 0) {
       const product = selected[0] as {
         id: string;
+        title: string;
+        images?: { originalSrc?: string }[];
         variants?: Array<{
           id: string;
           title: string;
@@ -430,15 +441,27 @@ export default function NewBundle() {
       const selectedVariants = product.variants || [];
 
       if (selectedVariants.length > 0) {
-        updateAddOn(localId, {
+        // Check if product changed
+        const productChanged = product.id !== productId;
+
+        const updates: Partial<LocalAddOn> = {
           selectedVariants: selectedVariants.map(v => ({
             shopifyVariantId: v.id,
             variantTitle: v.title,
             variantSku: v.sku || undefined,
             variantPrice: v.price ? parseFloat(v.price) : undefined,
           })),
-        });
-        shopify.toast.show("Variants updated");
+        };
+
+        // If product changed, also update product info
+        if (productChanged) {
+          updates.shopifyProductId = product.id;
+          updates.productTitle = product.title;
+          updates.productImageUrl = product.images?.[0]?.originalSrc;
+        }
+
+        updateAddOn(localId, updates);
+        shopify.toast.show(productChanged ? "Product and variants updated" : "Variants updated");
       }
     }
   }, [shopify]);
@@ -489,9 +512,9 @@ export default function NewBundle() {
 
     const formData = new FormData();
 
-    // Add basic form fields
+    // Add basic form fields (convert booleans to strings)
     Object.entries(form).forEach(([key, value]) => {
-      formData.append(key, value);
+      formData.append(key, typeof value === "boolean" ? value.toString() : value);
     });
 
     // Add JSON data for complex structures
@@ -742,6 +765,12 @@ export default function NewBundle() {
             </s-box>
           )}
 
+          {/* Delete add-ons with main product option */}
+          <s-checkbox
+            label="Delete add-on products after Main Product is deleted from cart"
+            {...(form.deleteAddOnsWithMain ? { checked: true } : {})}
+            onChange={(e: Event) => handleChange("deleteAddOnsWithMain", (e.target as HTMLInputElement).checked)}
+          />
         </s-stack>
       </s-section>
 
@@ -846,6 +875,7 @@ export default function NewBundle() {
           subtitle={form.subtitle}
           selectionMode={form.selectionMode}
           addOns={addOns}
+          endDate={form.endDate}
         />
       )}
 
@@ -867,7 +897,7 @@ export default function NewBundle() {
 // Styles Modal Component
 interface StylesModalProps {
   style: StyleState;
-  onStyleChange: (field: keyof StyleState, value: string | number) => void;
+  onStyleChange: (field: keyof StyleState, value: string | number | boolean) => void;
   onClose: () => void;
   onReset: () => void;
   // Preview data
@@ -875,9 +905,10 @@ interface StylesModalProps {
   subtitle: string;
   selectionMode: string;
   addOns: LocalAddOn[];
+  endDate: string;
 }
 
-function StylesModal({ style, onStyleChange, onClose, onReset, title, subtitle, selectionMode, addOns }: StylesModalProps) {
+function StylesModal({ style, onStyleChange, onClose, onReset, title, subtitle, selectionMode, addOns, endDate }: StylesModalProps) {
   const resetButtonRef = useRef<HTMLElement>(null);
   const doneButtonRef = useRef<HTMLElement>(null);
 
@@ -938,14 +969,16 @@ function StylesModal({ style, onStyleChange, onClose, onReset, title, subtitle, 
   };
 
   const leftPanelStyle: React.CSSProperties = {
-    flex: "0 0 40%",
+    flex: "0 0 400px",
+    width: "400px",
+    minWidth: "400px",
     padding: "20px 24px",
     overflowY: "auto",
     borderRight: "1px solid #e0e0e0",
   };
 
   const rightPanelStyle: React.CSSProperties = {
-    flex: "0 0 60%",
+    flex: 1,
     padding: "20px 24px",
     backgroundColor: "#f6f6f7",
     overflow: "hidden",
@@ -1013,6 +1046,19 @@ function StylesModal({ style, onStyleChange, onClose, onReset, title, subtitle, 
         <div style={modalBodyStyle}>
           {/* Left Panel - Style Controls */}
           <div style={leftPanelStyle}>
+            {/* Template Section */}
+            <div style={{ marginBottom: "24px" }}>
+              <s-select
+                label="Select Template"
+                value={style.template}
+                onInput={(e: Event) => onStyleChange("template", (e.target as HTMLSelectElement).value)}
+              >
+                <s-option value="DEFAULT" selected={style.template === "DEFAULT"}>Default</s-option>
+                <s-option value="MINIMAL" selected={style.template === "MINIMAL"}>Minimal</s-option>
+                <s-option value="MODERN" selected={style.template === "MODERN"}>Modern</s-option>
+              </s-select>
+            </div>
+
             {/* Colors Section */}
             <div style={{ marginBottom: "24px" }}>
               <s-stack direction="block" gap="tight">
@@ -1076,6 +1122,11 @@ function StylesModal({ style, onStyleChange, onClose, onReset, title, subtitle, 
                   </div>
                   <div style={{ flex: 1 }}></div>
                 </s-stack>
+                <s-checkbox
+                  label="Display countdown timer"
+                  {...(style.showCountdownTimer ? { checked: true } : {})}
+                  onChange={(e: Event) => onStyleChange("showCountdownTimer", (e.target as HTMLInputElement).checked)}
+                />
               </s-stack>
             </div>
 
@@ -1211,6 +1262,7 @@ function StylesModal({ style, onStyleChange, onClose, onReset, title, subtitle, 
                   selectionMode={selectionMode}
                   addOns={addOns}
                   style={style}
+                  endDate={endDate}
                 />
               </div>
             </div>
@@ -1237,9 +1289,48 @@ interface StylesModalPreviewProps {
   selectionMode: string;
   addOns: LocalAddOn[];
   style: StyleState;
+  endDate: string;
 }
 
-function StylesModalPreview({ title, subtitle, selectionMode, addOns, style }: StylesModalPreviewProps) {
+function StylesModalPreview({ title, subtitle, selectionMode, addOns, style, endDate }: StylesModalPreviewProps) {
+  // Countdown timer state
+  const [countdown, setCountdown] = useState<string>("");
+
+  useEffect(() => {
+    if (!style.showCountdownTimer || !endDate) {
+      setCountdown("");
+      return;
+    }
+
+    const calculateCountdown = () => {
+      const endTime = new Date(endDate).getTime();
+      const now = Date.now();
+      const diff = endTime - now;
+
+      if (diff <= 0) {
+        setCountdown("Offer ended");
+        return;
+      }
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      let countdownText = "";
+      if (days > 0) countdownText += `${days}d `;
+      if (hours > 0 || days > 0) countdownText += `${hours}h `;
+      if (minutes > 0 || hours > 0 || days > 0) countdownText += `${minutes}m `;
+      countdownText += `${seconds}s`;
+
+      setCountdown(countdownText);
+    };
+
+    calculateCountdown();
+    const interval = setInterval(calculateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [style.showCountdownTimer, endDate]);
+
   const previewStyle: React.CSSProperties = {
     backgroundColor: style.backgroundColor,
     color: style.fontColor,
@@ -1253,6 +1344,17 @@ function StylesModalPreview({ title, subtitle, selectionMode, addOns, style }: S
     maxWidth: "100%",
     boxSizing: "border-box",
     overflow: "hidden",
+  };
+
+  const countdownStyle: React.CSSProperties = {
+    backgroundColor: style.discountBadgeColor,
+    color: style.discountTextColor,
+    padding: "8px 12px",
+    borderRadius: "4px",
+    fontSize: "14px",
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: "12px",
   };
 
   const titleStyle: React.CSSProperties = {
@@ -1278,6 +1380,17 @@ function StylesModalPreview({ title, subtitle, selectionMode, addOns, style }: S
 
   return (
     <div style={previewStyle}>
+      {style.showCountdownTimer && (
+        <div style={countdownStyle}>
+          {endDate ? (
+            <>Ends in: {countdown || "calculating..."}</>
+          ) : (
+            <span style={{ opacity: 0.7, fontStyle: "italic", fontWeight: "normal" }}>
+              Set an end date to show countdown
+            </span>
+          )}
+        </div>
+      )}
       <div style={titleStyle}>{title || "Bundle Title"}</div>
       {subtitle && <div style={subtitleStyle}>{subtitle}</div>}
 

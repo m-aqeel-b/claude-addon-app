@@ -38,6 +38,7 @@ import type {
   DiscountLabelStyle,
   BorderStyle,
   WidgetStyle,
+  WidgetTemplate,
 } from "@prisma/client";
 
 interface LoaderData {
@@ -56,6 +57,7 @@ type AdminClient = {
 
 // Style state type for local management
 interface StyleState {
+  template: WidgetTemplate;
   backgroundColor: string;
   fontColor: string;
   buttonColor: string;
@@ -75,6 +77,7 @@ interface StyleState {
   marginBottom: number;
   imageSize: ImageSize;
   discountLabelStyle: DiscountLabelStyle;
+  showCountdownTimer: boolean;
 }
 
 // Helper to sync metafields after bundle changes
@@ -219,6 +222,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const combineWithProductDiscounts = formData.get("combineWithProductDiscounts") as DiscountCombination;
     const combineWithOrderDiscounts = formData.get("combineWithOrderDiscounts") as DiscountCombination;
     const combineWithShippingDiscounts = formData.get("combineWithShippingDiscounts") as DiscountCombination;
+    const deleteAddOnsWithMain = formData.get("deleteAddOnsWithMain") === "true";
 
     const errors: Record<string, string> = {};
 
@@ -249,6 +253,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       combineWithProductDiscounts,
       combineWithOrderDiscounts,
       combineWithShippingDiscounts,
+      deleteAddOnsWithMain,
     });
 
     // Sync metafields after bundle update
@@ -294,6 +299,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const combineWithProductDiscounts = formData.get("combineWithProductDiscounts") as DiscountCombination;
     const combineWithOrderDiscounts = formData.get("combineWithOrderDiscounts") as DiscountCombination;
     const combineWithShippingDiscounts = formData.get("combineWithShippingDiscounts") as DiscountCombination;
+    const deleteAddOnsWithMain = formData.get("deleteAddOnsWithMain") === "true";
 
     // Parse JSON data for batched changes
     const newTargetedItems = JSON.parse(formData.get("newTargetedItems") as string || "[]");
@@ -333,6 +339,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       combineWithProductDiscounts,
       combineWithOrderDiscounts,
       combineWithShippingDiscounts,
+      deleteAddOnsWithMain,
     });
 
     // 2. Process deleted targeted items
@@ -386,6 +393,11 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     // 6. Process modified add-on sets
     for (const addOn of modifiedAddOnSets) {
       await updateAddOnSet(addOn.id, {
+        // Include product info in case the product was changed
+        shopifyProductId: addOn.shopifyProductId,
+        productTitle: addOn.productTitle,
+        productImageUrl: addOn.productImageUrl,
+        // Configuration fields
         discountType: addOn.discountType as DiscountType,
         discountValue: addOn.discountValue,
         discountLabel: addOn.discountLabel,
@@ -906,9 +918,11 @@ export default function EditBundle() {
     combineWithProductDiscounts: bundle.combineWithProductDiscounts,
     combineWithOrderDiscounts: bundle.combineWithOrderDiscounts,
     combineWithShippingDiscounts: bundle.combineWithShippingDiscounts,
+    deleteAddOnsWithMain: bundle.deleteAddOnsWithMain,
   });
 
   const [style, setStyle] = useState<StyleState>({
+    template: widgetStyle.template,
     backgroundColor: widgetStyle.backgroundColor,
     fontColor: widgetStyle.fontColor,
     buttonColor: widgetStyle.buttonColor,
@@ -928,6 +942,7 @@ export default function EditBundle() {
     marginBottom: widgetStyle.marginBottom,
     imageSize: widgetStyle.imageSize,
     discountLabelStyle: widgetStyle.discountLabelStyle,
+    showCountdownTimer: widgetStyle.showCountdownTimer,
   });
 
   const isSubmitting = fetcher.state === "submitting";
@@ -956,6 +971,7 @@ export default function EditBundle() {
       shopify.toast.show("Styles reset & synced to store");
       // Update local style state with defaults
       setStyle({
+        template: "DEFAULT",
         backgroundColor: "#ffffff",
         fontColor: "#000000",
         buttonColor: "#000000",
@@ -975,6 +991,7 @@ export default function EditBundle() {
         marginBottom: 16,
         imageSize: "MEDIUM",
         discountLabelStyle: "BADGE",
+        showCountdownTimer: false,
       });
       setIsStyleModalOpen(false);
     } else if (fetcher.data?.action === "metafieldsSynced") {
@@ -982,11 +999,11 @@ export default function EditBundle() {
     }
   }, [fetcher.data, shopify, navigate]);
 
-  const handleFormChange = (field: string, value: string) => {
+  const handleFormChange = (field: string, value: string | boolean) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleStyleChange = (field: keyof StyleState, value: string | number) => {
+  const handleStyleChange = (field: keyof StyleState, value: string | number | boolean) => {
     setStyle((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -1000,6 +1017,8 @@ export default function EditBundle() {
       {
         intent: "saveAllChanges",
         ...form,
+        // Convert boolean to string for form submission
+        deleteAddOnsWithMain: form.deleteAddOnsWithMain ? "true" : "false",
         // Targeted items changes
         newTargetedItems: JSON.stringify(newTargetedItems),
         deletedTargetedItemIds: JSON.stringify(deletedTargetedItemIds),
@@ -1116,7 +1135,7 @@ export default function EditBundle() {
     }
   }, [shopify, localAddOnSets]);
 
-  // Edit variants for an existing add-on
+  // Edit variants for an existing add-on (also allows changing the product itself)
   const openVariantEditor = useCallback(async (addOnSetId: string, productId: string, currentVariantIds: string[]) => {
     const selected = await shopify.resourcePicker({
       type: "product",
@@ -1128,6 +1147,8 @@ export default function EditBundle() {
     if (selected && selected.length > 0) {
       const product = selected[0] as {
         id: string;
+        title: string;
+        images?: { originalSrc?: string }[];
         variants?: Array<{
           id: string;
           title: string;
@@ -1139,10 +1160,13 @@ export default function EditBundle() {
       const selectedVariants = product.variants || [];
 
       if (selectedVariants.length > 0) {
+        // Check if product changed
+        const productChanged = product.id !== productId;
+
         // Update local state (will be saved when Save is clicked)
         setLocalAddOnSets(prev => prev.map(addOn => {
           if (addOn.id === addOnSetId) {
-            return {
+            const updatedAddOn = {
               ...addOn,
               selectedVariants: selectedVariants.map(v => ({
                 id: `new-variant-${v.id}`,
@@ -1153,10 +1177,19 @@ export default function EditBundle() {
               })),
               isModified: !addOn.isNew, // Mark as modified if not new
             };
+
+            // If product changed, also update product info
+            if (productChanged) {
+              updatedAddOn.shopifyProductId = product.id;
+              updatedAddOn.productTitle = product.title;
+              updatedAddOn.productImageUrl = product.images?.[0]?.originalSrc || null;
+            }
+
+            return updatedAddOn;
           }
           return addOn;
         }));
-        shopify.toast.show("Variants updated - click Save to apply");
+        shopify.toast.show(productChanged ? "Product and variants updated - click Save to apply" : "Variants updated - click Save to apply");
       }
     }
   }, [shopify]);
@@ -1392,6 +1425,13 @@ export default function EditBundle() {
           {form.targetingType === "ALL_PRODUCTS" && (
             <s-text color="subdued">Add-ons will appear on all product pages.</s-text>
           )}
+
+          {/* Cart behavior checkbox */}
+          <s-checkbox
+            label="Delete add-on products after Main Product is deleted from cart"
+            checked={form.deleteAddOnsWithMain}
+            onChange={(e: Event) => handleFormChange("deleteAddOnsWithMain", (e.target as HTMLInputElement).checked)}
+          />
 
           {/* Specific products/collections UI */}
           {form.targetingType === "SPECIFIC_PRODUCTS" && (
@@ -1630,7 +1670,7 @@ export default function EditBundle() {
 // Styles Modal Component
 interface StylesModalProps {
   style: StyleState;
-  onStyleChange: (field: keyof StyleState, value: string | number) => void;
+  onStyleChange: (field: keyof StyleState, value: string | number | boolean) => void;
   onClose: () => void;
   onSave: () => void;
   onReset: () => void;
@@ -1700,14 +1740,16 @@ function StylesModal({ style, onStyleChange, onClose, onSave, onReset, bundle, a
   };
 
   const leftPanelStyle: React.CSSProperties = {
-    flex: "0 0 40%",
+    flex: "0 0 400px",
+    width: "400px",
+    minWidth: "400px",
     padding: "20px 24px",
     overflowY: "auto",
     borderRight: "1px solid #e0e0e0",
   };
 
   const rightPanelStyle: React.CSSProperties = {
-    flex: "0 0 60%",
+    flex: 1,
     padding: "20px 24px",
     backgroundColor: "#f6f6f7",
     overflow: "hidden",
@@ -1775,6 +1817,19 @@ function StylesModal({ style, onStyleChange, onClose, onSave, onReset, bundle, a
         <div style={modalBodyStyle}>
           {/* Left Panel - Style Controls */}
           <div style={leftPanelStyle}>
+            {/* Template Section */}
+            <div style={{ marginBottom: "24px" }}>
+              <s-select
+                label="Select Template"
+                value={style.template}
+                onInput={(e: Event) => onStyleChange("template", (e.target as HTMLSelectElement).value)}
+              >
+                <s-option value="DEFAULT" selected={style.template === "DEFAULT"}>Default</s-option>
+                <s-option value="MINIMAL" selected={style.template === "MINIMAL"}>Minimal</s-option>
+                <s-option value="MODERN" selected={style.template === "MODERN"}>Modern</s-option>
+              </s-select>
+            </div>
+
             {/* Colors Section */}
             <div style={{ marginBottom: "24px" }}>
               <s-stack direction="block" gap="tight">
@@ -1838,6 +1893,11 @@ function StylesModal({ style, onStyleChange, onClose, onSave, onReset, bundle, a
                   </div>
                   <div style={{ flex: 1 }}></div>
                 </s-stack>
+                <s-checkbox
+                  label="Display countdown timer"
+                  {...(style.showCountdownTimer ? { checked: true } : {})}
+                  onChange={(e: Event) => onStyleChange("showCountdownTimer", (e.target as HTMLInputElement).checked)}
+                />
               </s-stack>
             </div>
 
@@ -1998,6 +2058,44 @@ interface StylesModalPreviewProps {
 }
 
 function StylesModalPreview({ bundle, addOnSets, style }: StylesModalPreviewProps) {
+  // Countdown timer state
+  const [countdown, setCountdown] = useState<string>("");
+
+  useEffect(() => {
+    if (!style.showCountdownTimer || !bundle.endDate) {
+      setCountdown("");
+      return;
+    }
+
+    const calculateCountdown = () => {
+      const endTime = new Date(bundle.endDate!).getTime();
+      const now = Date.now();
+      const diff = endTime - now;
+
+      if (diff <= 0) {
+        setCountdown("Offer ended");
+        return;
+      }
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      let countdownText = "";
+      if (days > 0) countdownText += `${days}d `;
+      if (hours > 0 || days > 0) countdownText += `${hours}h `;
+      if (minutes > 0 || hours > 0 || days > 0) countdownText += `${minutes}m `;
+      countdownText += `${seconds}s`;
+
+      setCountdown(countdownText);
+    };
+
+    calculateCountdown();
+    const interval = setInterval(calculateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [style.showCountdownTimer, bundle.endDate]);
+
   const previewStyle: React.CSSProperties = {
     backgroundColor: style.backgroundColor,
     color: style.fontColor,
@@ -2011,6 +2109,17 @@ function StylesModalPreview({ bundle, addOnSets, style }: StylesModalPreviewProp
     maxWidth: "100%",
     boxSizing: "border-box",
     overflow: "hidden",
+  };
+
+  const countdownStyle: React.CSSProperties = {
+    backgroundColor: style.discountBadgeColor,
+    color: style.discountTextColor,
+    padding: "8px 12px",
+    borderRadius: "4px",
+    fontSize: "14px",
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: "12px",
   };
 
   const titleStyle: React.CSSProperties = {
@@ -2036,6 +2145,17 @@ function StylesModalPreview({ bundle, addOnSets, style }: StylesModalPreviewProp
 
   return (
     <div style={previewStyle}>
+      {style.showCountdownTimer && (
+        <div style={countdownStyle}>
+          {bundle.endDate ? (
+            <>Ends in: {countdown || "calculating..."}</>
+          ) : (
+            <span style={{ opacity: 0.7, fontStyle: "italic", fontWeight: "normal" }}>
+              Set an end date to show countdown
+            </span>
+          )}
+        </div>
+      )}
       <div style={titleStyle}>{bundle.title || "Bundle Title"}</div>
       {bundle.subtitle && <div style={subtitleStyle}>{bundle.subtitle}</div>}
 
