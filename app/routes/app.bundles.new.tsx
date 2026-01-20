@@ -498,12 +498,9 @@ export default function NewBundle() {
     setTargetedItems(prev => prev.filter(item => item.id !== localId));
   };
 
-  // Reset styles to defaults
+  // Reset styles to defaults (just updates local state, not saved until Save is clicked)
   const handleResetStyles = () => {
-    if (confirm("Reset all styles to defaults?")) {
-      setStyle(defaultStyleState);
-      shopify.toast.show("Styles reset to defaults");
-    }
+    setStyle(defaultStyleState);
   };
 
   // Submit handler
@@ -604,6 +601,7 @@ export default function NewBundle() {
               type="datetime-local"
               value={form.startDate}
               onChange={(e) => handleChange("startDate", e.target.value)}
+              placeholder="mm/dd/yyyy hh:mm"
               style={{
                 width: "100%",
                 padding: "8px 12px",
@@ -634,6 +632,7 @@ export default function NewBundle() {
                   type="datetime-local"
                   value={form.endDate}
                   onChange={(e) => handleChange("endDate", e.target.value)}
+                  placeholder="mm/dd/yyyy hh:mm"
                   style={{
                     width: "100%",
                     padding: "8px 12px",
@@ -911,6 +910,7 @@ interface StylesModalProps {
 function StylesModal({ style, onStyleChange, onClose, onReset, title, subtitle, selectionMode, addOns, endDate }: StylesModalProps) {
   const resetButtonRef = useRef<HTMLElement>(null);
   const doneButtonRef = useRef<HTMLElement>(null);
+  const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop");
 
   useEffect(() => {
     const resetBtn = resetButtonRef.current;
@@ -1250,12 +1250,65 @@ function StylesModal({ style, onStyleChange, onClose, onReset, title, subtitle, 
 
           {/* Right Panel - Live Preview */}
           <div style={rightPanelStyle}>
-            <div style={{ marginBottom: "12px", flexShrink: 0 }}>
-              <s-text variant="headingSm">Live Preview</s-text>
-              <s-text variant="bodySm" color="subdued">See how your widget will look</s-text>
+            <div style={{ marginBottom: "12px", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div>
+                <s-text variant="headingSm">Live Preview</s-text>
+                <s-text variant="bodySm" color="subdued">See how your widget will look</s-text>
+              </div>
+              {/* Desktop/Mobile Toggle */}
+              <div style={{ display: "flex", gap: "4px", backgroundColor: "#e0e0e0", borderRadius: "8px", padding: "4px" }}>
+                <button
+                  onClick={() => setPreviewMode("desktop")}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "36px",
+                    height: "32px",
+                    border: "none",
+                    borderRadius: "6px",
+                    backgroundColor: previewMode === "desktop" ? "#fff" : "transparent",
+                    cursor: "pointer",
+                    boxShadow: previewMode === "desktop" ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
+                  }}
+                  title="Desktop view"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={previewMode === "desktop" ? "#000" : "#666"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                    <line x1="8" y1="21" x2="16" y2="21"></line>
+                    <line x1="12" y1="17" x2="12" y2="21"></line>
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setPreviewMode("mobile")}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "36px",
+                    height: "32px",
+                    border: "none",
+                    borderRadius: "6px",
+                    backgroundColor: previewMode === "mobile" ? "#fff" : "transparent",
+                    cursor: "pointer",
+                    boxShadow: previewMode === "mobile" ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
+                  }}
+                  title="Mobile view"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={previewMode === "mobile" ? "#000" : "#666"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+                    <line x1="12" y1="18" x2="12.01" y2="18"></line>
+                  </svg>
+                </button>
+              </div>
             </div>
-            <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", paddingBottom: "16px" }}>
-              <div style={{ width: "100%", maxWidth: "100%", boxSizing: "border-box" }}>
+            <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", paddingBottom: "16px", display: "flex", justifyContent: "center" }}>
+              <div style={{
+                width: previewMode === "mobile" ? "375px" : "100%",
+                maxWidth: "100%",
+                boxSizing: "border-box",
+                transition: "width 0.3s ease",
+              }}>
                 <StylesModalPreview
                   title={title}
                   subtitle={subtitle}
@@ -1270,7 +1323,7 @@ function StylesModal({ style, onStyleChange, onClose, onReset, title, subtitle, 
         </div>
 
         <div style={modalFooterStyle}>
-          <s-button ref={resetButtonRef} variant="tertiary">
+          <s-button ref={resetButtonRef} variant="secondary">
             Reset to defaults
           </s-button>
           <s-button ref={doneButtonRef} variant="primary">
@@ -1745,38 +1798,98 @@ function DeleteConfirmModal({ productTitle, onConfirm, onCancel }: DeleteConfirm
 
   const modalContentStyle: React.CSSProperties = {
     backgroundColor: "#fff",
-    borderRadius: "12px",
+    borderRadius: "16px",
     width: "90%",
-    maxWidth: "400px",
+    maxWidth: "420px",
+    overflow: "hidden",
+    boxShadow: "0 20px 60px rgba(0, 0, 0, 0.3)",
+  };
+
+  const iconContainerStyle: React.CSSProperties = {
+    backgroundColor: "#fef2f2",
     padding: "24px",
-    boxShadow: "0 4px 24px rgba(0, 0, 0, 0.2)",
+    display: "flex",
+    justifyContent: "center",
+  };
+
+  const iconCircleStyle: React.CSSProperties = {
+    width: "64px",
+    height: "64px",
+    borderRadius: "50%",
+    backgroundColor: "#fee2e2",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  };
+
+  const contentStyle: React.CSSProperties = {
+    padding: "24px",
     textAlign: "center",
   };
 
   const buttonContainerStyle: React.CSSProperties = {
     display: "flex",
-    justifyContent: "center",
     gap: "12px",
-    marginTop: "20px",
+    padding: "0 24px 24px",
   };
 
   return (
     <div style={modalOverlayStyle} onClick={onCancel}>
       <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
-        <s-text variant="headingMd">Remove Add-On Product</s-text>
-        <div style={{ marginTop: "12px", marginBottom: "8px" }}>
-          <s-text color="subdued">
-            Are you sure you want to delete this add-on product?
-          </s-text>
+        <div style={iconContainerStyle}>
+          <div style={iconCircleStyle}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              <line x1="10" y1="11" x2="10" y2="17"></line>
+              <line x1="14" y1="11" x2="14" y2="17"></line>
+            </svg>
+          </div>
         </div>
-        <s-text variant="bodyMd">"{productTitle || "Untitled product"}"</s-text>
+        <div style={contentStyle}>
+          <h3 style={{ margin: "0 0 8px", fontSize: "18px", fontWeight: "600", color: "#111" }}>
+            Remove Add-On Product
+          </h3>
+          <p style={{ margin: "0 0 12px", fontSize: "14px", color: "#6b7280", lineHeight: "1.5" }}>
+            Are you sure you want to remove this add-on product? This action cannot be undone.
+          </p>
+          <p style={{ margin: "0", fontSize: "15px", fontWeight: "500", color: "#374151", backgroundColor: "#f3f4f6", padding: "8px 12px", borderRadius: "6px", display: "inline-block" }}>
+            {productTitle || "Untitled product"}
+          </p>
+        </div>
         <div style={buttonContainerStyle}>
-          <s-button variant="secondary" onClick={onCancel}>
-            No
-          </s-button>
-          <s-button variant="primary" tone="critical" onClick={onConfirm}>
-            Yes
-          </s-button>
+          <button
+            onClick={onCancel}
+            style={{
+              flex: 1,
+              padding: "12px 20px",
+              fontSize: "14px",
+              fontWeight: "500",
+              border: "1px solid #d1d5db",
+              borderRadius: "8px",
+              backgroundColor: "#fff",
+              color: "#374151",
+              cursor: "pointer",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            style={{
+              flex: 1,
+              padding: "12px 20px",
+              fontSize: "14px",
+              fontWeight: "500",
+              border: "none",
+              borderRadius: "8px",
+              backgroundColor: "#dc2626",
+              color: "#fff",
+              cursor: "pointer",
+            }}
+          >
+            Remove
+          </button>
         </div>
       </div>
     </div>
@@ -1806,38 +1919,98 @@ function DeleteTargetedItemModal({ item, onConfirm, onCancel }: DeleteTargetedIt
 
   const modalContentStyle: React.CSSProperties = {
     backgroundColor: "#fff",
-    borderRadius: "12px",
+    borderRadius: "16px",
     width: "90%",
-    maxWidth: "400px",
+    maxWidth: "420px",
+    overflow: "hidden",
+    boxShadow: "0 20px 60px rgba(0, 0, 0, 0.3)",
+  };
+
+  const iconContainerStyle: React.CSSProperties = {
+    backgroundColor: "#fef2f2",
     padding: "24px",
-    boxShadow: "0 4px 24px rgba(0, 0, 0, 0.2)",
+    display: "flex",
+    justifyContent: "center",
+  };
+
+  const iconCircleStyle: React.CSSProperties = {
+    width: "64px",
+    height: "64px",
+    borderRadius: "50%",
+    backgroundColor: "#fee2e2",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  };
+
+  const contentStyle: React.CSSProperties = {
+    padding: "24px",
     textAlign: "center",
   };
 
   const buttonContainerStyle: React.CSSProperties = {
     display: "flex",
-    justifyContent: "center",
     gap: "12px",
-    marginTop: "20px",
+    padding: "0 24px 24px",
   };
 
   return (
     <div style={modalOverlayStyle} onClick={onCancel}>
       <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
-        <s-text variant="headingMd">Remove {item.shopifyResourceType}</s-text>
-        <div style={{ marginTop: "12px", marginBottom: "8px" }}>
-          <s-text color="subdued">
-            Are you sure you want to remove this {item.shopifyResourceType.toLowerCase()} from targeting?
-          </s-text>
+        <div style={iconContainerStyle}>
+          <div style={iconCircleStyle}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              <line x1="10" y1="11" x2="10" y2="17"></line>
+              <line x1="14" y1="11" x2="14" y2="17"></line>
+            </svg>
+          </div>
         </div>
-        <s-text variant="bodyMd">"{item.title}"</s-text>
+        <div style={contentStyle}>
+          <h3 style={{ margin: "0 0 8px", fontSize: "18px", fontWeight: "600", color: "#111" }}>
+            Remove {item.shopifyResourceType}
+          </h3>
+          <p style={{ margin: "0 0 12px", fontSize: "14px", color: "#6b7280", lineHeight: "1.5" }}>
+            Are you sure you want to remove this {item.shopifyResourceType.toLowerCase()} from targeting?
+          </p>
+          <p style={{ margin: "0", fontSize: "15px", fontWeight: "500", color: "#374151", backgroundColor: "#f3f4f6", padding: "8px 12px", borderRadius: "6px", display: "inline-block" }}>
+            {item.title}
+          </p>
+        </div>
         <div style={buttonContainerStyle}>
-          <s-button variant="secondary" onClick={onCancel}>
-            No
-          </s-button>
-          <s-button variant="primary" tone="critical" onClick={onConfirm}>
-            Yes
-          </s-button>
+          <button
+            onClick={onCancel}
+            style={{
+              flex: 1,
+              padding: "12px 20px",
+              fontSize: "14px",
+              fontWeight: "500",
+              border: "1px solid #d1d5db",
+              borderRadius: "8px",
+              backgroundColor: "#fff",
+              color: "#374151",
+              cursor: "pointer",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            style={{
+              flex: 1,
+              padding: "12px 20px",
+              fontSize: "14px",
+              fontWeight: "500",
+              border: "none",
+              borderRadius: "8px",
+              backgroundColor: "#dc2626",
+              color: "#fff",
+              cursor: "pointer",
+            }}
+          >
+            Remove
+          </button>
         </div>
       </div>
     </div>
