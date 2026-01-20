@@ -1259,31 +1259,28 @@ export default function EditBundle() {
       back-action="/app/bundles"
     >
       <s-button
+        slot="secondary-actions"
         ref={toggleStatusButtonRef}
-        slot="secondary-action"
-        variant="secondary"
       >
         {form.status === "ARCHIVED" ? "Activate" : "Deactivate"}
       </s-button>
       <s-button
+        slot="secondary-actions"
         ref={syncButtonRef}
-        slot="secondary-action"
-        variant="secondary"
         title="Force sync to store (normally not needed - saves auto-sync)"
       >
         Force Sync
       </s-button>
       <s-button
+        slot="secondary-actions"
         ref={deleteButtonRef}
-        slot="secondary-action"
-        variant="secondary"
         tone="critical"
       >
         Delete
       </s-button>
       <s-button
-        ref={saveButtonRef}
         slot="primary-action"
+        ref={saveButtonRef}
         variant="primary"
         {...(isSubmitting ? { loading: true } : {})}
       >
