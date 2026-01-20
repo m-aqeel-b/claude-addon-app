@@ -48,6 +48,8 @@ interface WidgetConfig {
   subtitle: string | null;
   selectionMode: string;
   targetingType: string;
+  startDate: string | null;
+  endDate: string | null;
   addOns: Array<{
     addOnId: string;
     productTitle: string | null;
@@ -66,7 +68,7 @@ interface WidgetConfig {
       variantPrice: number | null;
     }>;
   }>;
-  style: Record<string, string | number>;
+  style: Record<string, string | number | boolean>;
   productGroups?: Array<{
     title: string;
     addOns: string[]; // Add-on IDs
@@ -117,6 +119,8 @@ export function buildWidgetConfig(
     subtitle: bundle.subtitle,
     selectionMode: bundle.selectionMode,
     targetingType: bundle.targetingType,
+    startDate: bundle.startDate ? bundle.startDate.toISOString() : null,
+    endDate: bundle.endDate ? bundle.endDate.toISOString() : null,
     addOns: addOnSets.map((addOn) => ({
       addOnId: addOn.id,
       productTitle: addOn.productTitle,
@@ -156,6 +160,7 @@ export function buildWidgetConfig(
           marginBottom: widgetStyle.marginBottom,
           imageSize: widgetStyle.imageSize,
           discountLabelStyle: widgetStyle.discountLabelStyle,
+          showCountdownTimer: widgetStyle.showCountdownTimer,
         }
       : {},
   };

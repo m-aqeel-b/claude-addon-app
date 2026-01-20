@@ -19,9 +19,16 @@
     assign config = shop.metafields['addon-bundle']['global_config'].value
     assign config_source = 'shop'
   endif
-%}
 
-<!-- DEBUG: config_source={{ config_source }}, has_config={{ config | json | size }} -->
+  comment
+    Get widget style settings from config
+  endcomment
+  assign widget_style = config.style
+  assign show_countdown = false
+  if widget_style.showCountdownTimer == true and config.endDate != blank
+    assign show_countdown = true
+  endif
+%}
 
 {% if config != blank and config != empty %}
 
@@ -29,38 +36,76 @@
     class="addon-bundle-widget"
     data-bundle-id="{{ config.bundleId }}"
     data-product-id="{{ product.id }}"
+    {% if show_countdown %}
+      data-end-date="{{ config.endDate }}"
+    {% endif %}
     style="
-      --addon-bg-color: {{ block.settings.background_color }};
-      --addon-font-color: {{ block.settings.font_color }};
-      --addon-button-color: {{ block.settings.button_color }};
-      --addon-button-text-color: {{ block.settings.button_text_color }};
-      --addon-badge-bg: {{ block.settings.badge_background }};
-      --addon-badge-color: {{ block.settings.badge_text_color }};
-      --addon-border-radius: {{ block.settings.border_radius }}px;
-      --addon-font-size: {{ block.settings.font_size }}px;
+      --addon-bg-color: {{ widget_style.backgroundColor | default: block.settings.background_color }};
+      --addon-font-color: {{ widget_style.fontColor | default: block.settings.font_color }};
+      --addon-button-color: {{ widget_style.buttonColor | default: block.settings.button_color }};
+      --addon-button-text-color: {{ widget_style.buttonTextColor | default: block.settings.button_text_color }};
+      --addon-badge-bg: {{ widget_style.discountBadgeColor | default: block.settings.badge_background }};
+      --addon-badge-color: {{ widget_style.discountTextColor | default: block.settings.badge_text_color }};
+      --addon-border-radius: {{ widget_style.borderRadius | default: block.settings.border_radius }}px;
+      --addon-font-size: {{ widget_style.fontSize | default: block.settings.font_size }}px;
+      --addon-title-font-size: {{ widget_style.titleFontSize | default: 18 }}px;
+      --addon-subtitle-font-size: {{ widget_style.subtitleFontSize | default: 14 }}px;
+      --addon-border-style: {{ widget_style.borderStyle | default: 'solid' | downcase }};
+      --addon-border-width: {{ widget_style.borderWidth | default: 1 }}px;
+      --addon-border-color: {{ widget_style.borderColor | default: '#e0e0e0' }};
+      --addon-padding: {{ widget_style.padding | default: 16 }}px;
+      --addon-margin-top: {{ widget_style.marginTop | default: 16 }}px;
+      --addon-margin-bottom: {{ widget_style.marginBottom | default: 16 }}px;
     "
   >
-    {% if block.settings.show_title %}
-      <h3 class="addon-bundle-widget__title">
-        {{ block.settings.title | default: config.title | default: 'Add-Ons' }}
-      </h3>
+    {% comment %} Bundle Title from config {% endcomment %}
+    {% if config.title != blank %}
+      <h3 class="addon-bundle-widget__title">{{ config.title }}</h3>
     {% endif %}
 
+    {% comment %} Bundle Subtitle from config {% endcomment %}
     {% if config.subtitle != blank %}
       <p class="addon-bundle-widget__subtitle">{{ config.subtitle }}</p>
     {% endif %}
 
+    {% comment %} Countdown Timer {% endcomment %}
+    {% if show_countdown %}
+      <div class="addon-bundle-widget__countdown" data-countdown-target="{{ config.endDate }}">
+        <div class="addon-countdown">
+          <div class="addon-countdown__item">
+            <span class="addon-countdown__value" data-days>00</span>
+            <span class="addon-countdown__label">Days</span>
+          </div>
+          <div class="addon-countdown__separator">:</div>
+          <div class="addon-countdown__item">
+            <span class="addon-countdown__value" data-hours>00</span>
+            <span class="addon-countdown__label">Hours</span>
+          </div>
+          <div class="addon-countdown__separator">:</div>
+          <div class="addon-countdown__item">
+            <span class="addon-countdown__value" data-minutes>00</span>
+            <span class="addon-countdown__label">Mins</span>
+          </div>
+          <div class="addon-countdown__separator">:</div>
+          <div class="addon-countdown__item">
+            <span class="addon-countdown__value" data-seconds>00</span>
+            <span class="addon-countdown__label">Secs</span>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
     {% comment %} Product Groups with Tabs {% endcomment %}
     {% if config.productGroups != blank and config.productGroups.size > 1 %}
-      {% render 'addon-tabs', groups: config.productGroups, selection_mode: config.selectionMode %}
+      {% render 'addon-tabs', groups: config.productGroups, selection_mode: config.selectionMode, image_size: widget_style.imageSize %}
     {% else %}
       {% comment %} Regular Add-On List {% endcomment %}
-      <div class="addon-bundle-widget__list addon-bundle-widget__list--{{ block.settings.layout }}">
+      <div class="addon-bundle-widget__list addon-bundle-widget__list--{{ widget_style.layoutType | default: 'LIST' | downcase }}">
         {% for addon in config.addOns %}
           {% render 'addon-item',
             addon: addon,
             selection_mode: config.selectionMode,
-            image_size: block.settings.image_size,
+            image_size: widget_style.imageSize,
             show_quantity: addon.showQuantitySelector
           %}
         {% endfor %}
@@ -80,41 +125,8 @@
   "javascript": "addon-bundle.js",
   "settings": [
     {
-      "type": "checkbox",
-      "id": "show_title",
-      "label": "Show title",
-      "default": true
-    },
-    {
-      "type": "text",
-      "id": "title",
-      "label": "Widget title",
-      "default": "Add-Ons"
-    },
-    {
-      "type": "select",
-      "id": "layout",
-      "label": "Layout",
-      "options": [
-        { "value": "list", "label": "List" },
-        { "value": "grid", "label": "Grid" }
-      ],
-      "default": "list"
-    },
-    {
-      "type": "select",
-      "id": "image_size",
-      "label": "Image size",
-      "options": [
-        { "value": "small", "label": "Small (50px)" },
-        { "value": "medium", "label": "Medium (80px)" },
-        { "value": "large", "label": "Large (120px)" }
-      ],
-      "default": "medium"
-    },
-    {
       "type": "header",
-      "content": "Colors"
+      "content": "Fallback Colors (used if not set in app)"
     },
     {
       "type": "color",
@@ -154,7 +166,7 @@
     },
     {
       "type": "header",
-      "content": "Spacing"
+      "content": "Fallback Spacing"
     },
     {
       "type": "range",

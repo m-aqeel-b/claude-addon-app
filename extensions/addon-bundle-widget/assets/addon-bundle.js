@@ -49,8 +49,69 @@
     setupQuantityListeners();
     initializeSelections();
 
+    // Initialize countdown timer if present
+    initCountdownTimer();
+
     // CRITICAL: Override the add to cart behavior
     overrideAddToCart();
+  }
+
+  /**
+   * Initialize countdown timer
+   */
+  function initCountdownTimer() {
+    const countdownEl = document.querySelector('.addon-bundle-widget__countdown');
+    if (!countdownEl) return;
+
+    const endDateStr = countdownEl.dataset.countdownTarget;
+    if (!endDateStr) return;
+
+    const endDate = new Date(endDateStr);
+    if (isNaN(endDate.getTime())) {
+      console.error('[AddonBundle] Invalid countdown end date:', endDateStr);
+      return;
+    }
+
+    console.log('[AddonBundle] Countdown initialized, ends:', endDate);
+
+    const daysEl = countdownEl.querySelector('[data-days]');
+    const hoursEl = countdownEl.querySelector('[data-hours]');
+    const minutesEl = countdownEl.querySelector('[data-minutes]');
+    const secondsEl = countdownEl.querySelector('[data-seconds]');
+    const countdownContainer = countdownEl.querySelector('.addon-countdown');
+
+    function updateCountdown() {
+      const now = new Date();
+      const diff = endDate - now;
+
+      if (diff <= 0) {
+        // Countdown expired
+        if (daysEl) daysEl.textContent = '00';
+        if (hoursEl) hoursEl.textContent = '00';
+        if (minutesEl) minutesEl.textContent = '00';
+        if (secondsEl) secondsEl.textContent = '00';
+        if (countdownContainer) countdownContainer.classList.add('addon-countdown--expired');
+        return false;
+      }
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      if (daysEl) daysEl.textContent = String(days).padStart(2, '0');
+      if (hoursEl) hoursEl.textContent = String(hours).padStart(2, '0');
+      if (minutesEl) minutesEl.textContent = String(minutes).padStart(2, '0');
+      if (secondsEl) secondsEl.textContent = String(seconds).padStart(2, '0');
+
+      return true;
+    }
+
+    // Initial update
+    if (updateCountdown()) {
+      // Update every second
+      setInterval(updateCountdown, 1000);
+    }
   }
 
   /**
@@ -175,8 +236,74 @@
         if (selection) {
           selection.variantId = extractNumericId(e.target.value);
         }
+
+        // Update price display when variant changes
+        const addonItem = e.target.closest('.addon-item');
+        const selectedOption = e.target.options[e.target.selectedIndex];
+        const newPrice = selectedOption.dataset.price;
+
+        if (addonItem && newPrice) {
+          updatePriceDisplay(addonItem, parseFloat(newPrice));
+        }
       });
     });
+  }
+
+  /**
+   * Update price display for an addon item
+   */
+  function updatePriceDisplay(addonItem, originalPrice) {
+    const priceRow = addonItem.querySelector('.addon-item__price-row');
+    if (!priceRow) return;
+
+    const input = addonItem.querySelector('.addon-item__input');
+    const discountType = input?.dataset.discountType;
+    const discountValue = parseFloat(input?.dataset.discountValue) || 0;
+
+    let discountedPrice = originalPrice;
+    let hasDiscount = false;
+
+    switch (discountType) {
+      case 'PERCENTAGE':
+        if (discountValue > 0) {
+          discountedPrice = originalPrice - (originalPrice * discountValue / 100);
+          hasDiscount = true;
+        }
+        break;
+      case 'FIXED_AMOUNT':
+        if (discountValue > 0) {
+          discountedPrice = Math.max(0, originalPrice - discountValue);
+          hasDiscount = true;
+        }
+        break;
+      case 'FIXED_PRICE':
+        discountedPrice = discountValue;
+        hasDiscount = true;
+        break;
+      case 'FREE_GIFT':
+        discountedPrice = 0;
+        hasDiscount = true;
+        break;
+    }
+
+    // Format prices
+    const formatPrice = (price) => {
+      return new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: window.Shopify?.currency?.active || 'USD'
+      }).format(price);
+    };
+
+    if (hasDiscount) {
+      priceRow.innerHTML = `
+        <span class="addon-item__price addon-item__price--original">${formatPrice(originalPrice)}</span>
+        <span class="addon-item__price addon-item__price--discounted">${discountedPrice === 0 ? 'FREE' : formatPrice(discountedPrice)}</span>
+      `;
+    } else {
+      priceRow.innerHTML = `
+        <span class="addon-item__price">${formatPrice(originalPrice)}</span>
+      `;
+    }
   }
 
   /**

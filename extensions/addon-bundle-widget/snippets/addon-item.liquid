@@ -15,8 +15,13 @@
     assign input_type = 'radio'
   endif
 
+  comment
+    Normalize image_size to lowercase (config stores SMALL, MEDIUM, LARGE)
+  endcomment
+  assign image_size_normalized = image_size | downcase | default: 'medium'
+
   assign image_dimension = 80
-  case image_size
+  case image_size_normalized
     when 'small'
       assign image_dimension = 50
     when 'large'
@@ -29,20 +34,28 @@
   endif
 
   assign variant_id = ''
+  assign variant_price = nil
+  assign first_variant = nil
 
   for variant in addon.selectedVariants limit:1
     if variant.shopifyVariantId != blank
       assign variant_id = variant.shopifyVariantId
+      assign variant_price = variant.variantPrice
+      assign first_variant = variant
       break
     endif
   endfor
 
   if variant_id == blank and addon.selectedVariants[0].shopifyVariantId != blank
     assign variant_id = addon.selectedVariants[0].shopifyVariantId
+    assign variant_price = addon.selectedVariants[0].variantPrice
+    assign first_variant = addon.selectedVariants[0]
   endif
 
   if variant_id == blank and addon.selectedVariants.first.shopifyVariantId != blank
     assign variant_id = addon.selectedVariants.first.shopifyVariantId
+    assign variant_price = addon.selectedVariants.first.variantPrice
+    assign first_variant = addon.selectedVariants.first
   endif
 
   if variant_id == blank and addon.variantId != blank
@@ -52,17 +65,59 @@
   if variant_id == blank and addon.shopifyVariantId != blank
     assign variant_id = addon.shopifyVariantId
   endif
+
+  comment
+    Calculate discounted price
+  endcomment
+  assign original_price = variant_price
+  assign discounted_price = original_price
+  assign has_discount = false
+
+  if original_price != blank and original_price != nil
+    case addon.discountType
+      when 'PERCENTAGE'
+        if addon.discountValue != blank and addon.discountValue > 0
+          assign discount_amount = original_price | times: addon.discountValue | divided_by: 100.0
+          assign discounted_price = original_price | minus: discount_amount
+          assign has_discount = true
+        endif
+      when 'FIXED_AMOUNT'
+        if addon.discountValue != blank and addon.discountValue > 0
+          assign discounted_price = original_price | minus: addon.discountValue
+          if discounted_price < 0
+            assign discounted_price = 0
+          endif
+          assign has_discount = true
+        endif
+      when 'FIXED_PRICE'
+        if addon.discountValue != blank
+          assign discounted_price = addon.discountValue
+          assign has_discount = true
+        endif
+      when 'FREE_GIFT'
+        assign discounted_price = 0
+        assign has_discount = true
+    endcase
+  endif
+
+  comment
+    Determine image URL - use custom image, product image, or placeholder
+  endcomment
+  assign display_image_url = addon.imageUrl
+  assign has_image = false
+  if addon.imageUrl != blank and addon.imageUrl != nil
+    assign has_image = true
+  endif
 %}
 
-<!-- Debug: variant_id={{ variant_id }}, selectedVariants={{ addon.selectedVariants | json }}, size={{ addon.selectedVariants.size }} -->
-<div class="addon-item" data-addon-id="{{ addon.addOnId }}" data-variant-id="{{ variant_id }}">
+<div class="addon-item" data-addon-id="{{ addon.addOnId }}" data-variant-id="{{ variant_id }}" data-original-price="{{ original_price }}" data-discounted-price="{{ discounted_price }}">
   <label class="addon-item__label">
     <input
       type="{{ input_type }}"
       name="addon_selection{% if selection_mode == 'SINGLE' %}_group{% endif %}"
       value="{{ addon.addOnId }}"
       class="addon-item__input"
-      data-price="{{ addon.originalPrice }}"
+      data-price="{{ original_price }}"
       data-discount-type="{{ addon.discountType }}"
       data-discount-value="{{ addon.discountValue }}"
       {{ checked_attr }}
@@ -70,43 +125,90 @@
 
     <span class="addon-item__checkbox-custom"></span>
 
-    {% if addon.imageUrl != blank %}
-      <img
-        src="{{ addon.imageUrl | image_url: width: image_dimension }}"
-        alt="{{ addon.productTitle }}"
-        class="addon-item__image addon-item__image--{{ image_size }}"
-        width="{{ image_dimension }}"
-        height="{{ image_dimension }}"
-        loading="lazy"
-      >
-    {% endif %}
+    {% comment %} Product Image - always show, with placeholder if no image {% endcomment %}
+    <div class="addon-item__image-wrapper addon-item__image-wrapper--{{ image_size_normalized }}">
+      {% if has_image %}
+        <img
+          src="{{ display_image_url }}"
+          alt="{{ addon.productTitle }}"
+          class="addon-item__image addon-item__image--{{ image_size_normalized }}"
+          width="{{ image_dimension }}"
+          height="{{ image_dimension }}"
+          loading="lazy"
+        >
+      {% else %}
+        {% comment %} Placeholder image when no product image available {% endcomment %}
+        <div class="addon-item__placeholder addon-item__placeholder--{{ image_size_normalized }}">
+          <svg class="addon-item__placeholder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+        </div>
+      {% endif %}
+    </div>
 
     <span class="addon-item__content">
-      <span class="addon-item__title">
-        {{ addon.title | default: addon.productTitle }}
-        {% if addon.discountLabel != blank %}
+      {% comment %} Title Row {% endcomment %}
+      <span class="addon-item__title-row">
+        <span class="addon-item__title">
+          {{ addon.title | default: addon.productTitle }}
+        </span>
+        {% comment %} Discount Label Badge {% endcomment %}
+        {% if addon.discountType == 'FREE_GIFT' %}
+          <span class="addon-item__badge addon-item__badge--free">FREE</span>
+        {% elsif addon.discountLabel != blank %}
           <span class="addon-item__badge">{{ addon.discountLabel }}</span>
-        {% elsif addon.discountType == 'FREE_GIFT' %}
-          <span class="addon-item__badge addon-item__badge--free">{{ 'addon_bundle.free_gift' | t }}</span>
-        {% elsif addon.discountValue != blank %}
-          {% render 'addon-price', addon: addon %}
+        {% elsif addon.discountType == 'PERCENTAGE' and addon.discountValue != blank %}
+          <span class="addon-item__badge">{{ addon.discountValue }}% OFF</span>
+        {% elsif addon.discountType == 'FIXED_AMOUNT' and addon.discountValue != blank %}
+          <span class="addon-item__badge">{{ addon.discountValue | times: 100 | money }} OFF</span>
         {% endif %}
       </span>
 
+      {% comment %} Price Display {% endcomment %}
+      {% if original_price != blank and original_price != nil %}
+        <span class="addon-item__price-row">
+          {% if has_discount %}
+            <span class="addon-item__price addon-item__price--original">
+              {{ original_price | times: 100 | money }}
+            </span>
+            <span class="addon-item__price addon-item__price--discounted">
+              {% if discounted_price == 0 %}
+                FREE
+              {% else %}
+                {{ discounted_price | times: 100 | money }}
+              {% endif %}
+            </span>
+          {% else %}
+            <span class="addon-item__price">
+              {{ original_price | times: 100 | money }}
+            </span>
+          {% endif %}
+        </span>
+      {% endif %}
+
+      {% comment %} Variant Title if available {% endcomment %}
+      {% if first_variant.variantTitle != blank and first_variant.variantTitle != 'Default Title' %}
+        <span class="addon-item__variant-title">{{ first_variant.variantTitle }}</span>
+      {% endif %}
+
+      {% comment %} Variant Selector for multiple variants {% endcomment %}
       {% if addon.selectedVariants.size > 1 %}
         <select class="addon-item__variant-select" data-addon-id="{{ addon.addOnId }}">
           {% for variant in addon.selectedVariants %}
             <option value="{{ variant.shopifyVariantId }}" data-price="{{ variant.variantPrice }}">
-              {{ variant.variantTitle }}
+              {{ variant.variantTitle }}{% if variant.variantPrice != blank %} - {{ variant.variantPrice | times: 100 | money }}{% endif %}
             </option>
           {% endfor %}
         </select>
       {% endif %}
 
+      {% comment %} Quantity Selector {% endcomment %}
       {% if show_quantity %}
         <span class="addon-item__quantity">
           <label class="addon-item__quantity-label" for="addon-qty-{{ addon.addOnId }}">
-            {{ 'addon_bundle.quantity' | t }}:
+            Qty:
           </label>
           <input
             type="number"

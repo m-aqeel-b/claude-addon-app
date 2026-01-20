@@ -2137,11 +2137,11 @@ interface StylesModalPreviewProps {
 
 function StylesModalPreview({ bundle, addOnSets, style }: StylesModalPreviewProps) {
   // Countdown timer state
-  const [countdown, setCountdown] = useState<string>("");
+  const [countdownValues, setCountdownValues] = useState({ days: "00", hours: "00", minutes: "00", seconds: "00" });
+  const [isExpired, setIsExpired] = useState(false);
 
   useEffect(() => {
     if (!style.showCountdownTimer || !bundle.endDate) {
-      setCountdown("");
       return;
     }
 
@@ -2151,28 +2151,66 @@ function StylesModalPreview({ bundle, addOnSets, style }: StylesModalPreviewProp
       const diff = endTime - now;
 
       if (diff <= 0) {
-        setCountdown("Offer ended");
+        setIsExpired(true);
+        setCountdownValues({ days: "00", hours: "00", minutes: "00", seconds: "00" });
         return;
       }
 
+      setIsExpired(false);
       const days = Math.floor(diff / (1000 * 60 * 60 * 24));
       const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
       const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
       const seconds = Math.floor((diff % (1000 * 60)) / 1000);
 
-      let countdownText = "";
-      if (days > 0) countdownText += `${days}d `;
-      if (hours > 0 || days > 0) countdownText += `${hours}h `;
-      if (minutes > 0 || hours > 0 || days > 0) countdownText += `${minutes}m `;
-      countdownText += `${seconds}s`;
-
-      setCountdown(countdownText);
+      setCountdownValues({
+        days: String(days).padStart(2, '0'),
+        hours: String(hours).padStart(2, '0'),
+        minutes: String(minutes).padStart(2, '0'),
+        seconds: String(seconds).padStart(2, '0'),
+      });
     };
 
     calculateCountdown();
     const interval = setInterval(calculateCountdown, 1000);
     return () => clearInterval(interval);
   }, [style.showCountdownTimer, bundle.endDate]);
+
+  // Get image size in pixels
+  const getImageSize = () => {
+    switch (style.imageSize) {
+      case "SMALL": return 50;
+      case "LARGE": return 120;
+      default: return 80;
+    }
+  };
+  const imageSize = getImageSize();
+
+  // Calculate discounted price
+  const calculateDiscountedPrice = (originalPrice: number, discountType: string, discountValue: number | null) => {
+    if (!discountValue && discountType !== "FREE_GIFT") return originalPrice;
+
+    switch (discountType) {
+      case "PERCENTAGE":
+        return originalPrice - (originalPrice * (discountValue || 0) / 100);
+      case "FIXED_AMOUNT":
+        return Math.max(0, originalPrice - (discountValue || 0));
+      case "FIXED_PRICE":
+        return discountValue || 0;
+      case "FREE_GIFT":
+        return 0;
+      default:
+        return originalPrice;
+    }
+  };
+
+  // Get discount badge text
+  const getDiscountBadge = (addOn: AddOnSetWithVariants) => {
+    if (addOn.discountType === "FREE_GIFT") return "FREE";
+    if (addOn.discountLabel) return addOn.discountLabel;
+    if (addOn.discountType === "PERCENTAGE" && addOn.discountValue) return `${addOn.discountValue}% OFF`;
+    if (addOn.discountType === "FIXED_AMOUNT" && addOn.discountValue) return `$${addOn.discountValue} OFF`;
+    return null;
+  };
 
   const previewStyle: React.CSSProperties = {
     backgroundColor: style.backgroundColor,
@@ -2189,90 +2227,248 @@ function StylesModalPreview({ bundle, addOnSets, style }: StylesModalPreviewProp
     overflow: "hidden",
   };
 
-  const countdownStyle: React.CSSProperties = {
-    backgroundColor: style.discountBadgeColor,
-    color: style.discountTextColor,
-    padding: "8px 12px",
-    borderRadius: "4px",
-    fontSize: "14px",
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: "12px",
-  };
-
   const titleStyle: React.CSSProperties = {
     fontSize: `${style.titleFontSize}px`,
-    fontWeight: "bold",
+    fontWeight: 600,
     marginBottom: "8px",
+    lineHeight: 1.3,
   };
 
   const subtitleStyle: React.CSSProperties = {
     fontSize: `${style.subtitleFontSize}px`,
     opacity: 0.8,
     marginBottom: "16px",
+    lineHeight: 1.4,
+  };
+
+  const countdownContainerStyle: React.CSSProperties = {
+    marginBottom: "16px",
+  };
+
+  const countdownStyle: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "8px",
+    background: `linear-gradient(135deg, ${style.discountBadgeColor} 0%, ${style.discountBadgeColor}cc 100%)`,
+    padding: "12px 20px",
+    borderRadius: "8px",
+    opacity: isExpired ? 0.6 : 1,
+  };
+
+  const countdownItemStyle: React.CSSProperties = {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    minWidth: "45px",
+  };
+
+  const countdownValueStyle: React.CSSProperties = {
+    fontSize: "1.5em",
+    fontWeight: 700,
+    color: style.discountTextColor,
+    lineHeight: 1,
+    fontVariantNumeric: "tabular-nums",
+  };
+
+  const countdownLabelStyle: React.CSSProperties = {
+    fontSize: "0.7em",
+    color: style.discountTextColor,
+    opacity: 0.9,
+    textTransform: "uppercase",
+    letterSpacing: "0.5px",
+    marginTop: "4px",
+  };
+
+  const countdownSeparatorStyle: React.CSSProperties = {
+    fontSize: "1.5em",
+    fontWeight: 700,
+    color: style.discountTextColor,
+    opacity: 0.7,
+    lineHeight: 1,
+    marginBottom: "16px",
   };
 
   const badgeStyle: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "3px 8px",
     backgroundColor: style.discountBadgeColor,
     color: style.discountTextColor,
-    padding: "2px 8px",
+    fontSize: "0.7em",
+    fontWeight: 700,
     borderRadius: "4px",
-    fontSize: "12px",
-    marginLeft: "8px",
+    textTransform: "uppercase",
+    letterSpacing: "0.5px",
+    whiteSpace: "nowrap",
+  };
+
+  const freeBadgeStyle: React.CSSProperties = {
+    ...badgeStyle,
+    backgroundColor: "#27ae60",
   };
 
   return (
     <div style={previewStyle}>
+      {/* Title */}
+      {bundle.title && <div style={titleStyle}>{bundle.title}</div>}
+
+      {/* Subtitle */}
+      {bundle.subtitle && <div style={subtitleStyle}>{bundle.subtitle}</div>}
+
+      {/* Countdown Timer */}
       {style.showCountdownTimer && (
-        <div style={countdownStyle}>
+        <div style={countdownContainerStyle}>
           {bundle.endDate ? (
-            <>Ends in: {countdown || "calculating..."}</>
+            <div style={countdownStyle}>
+              <div style={countdownItemStyle}>
+                <span style={countdownValueStyle}>{countdownValues.days}</span>
+                <span style={countdownLabelStyle}>Days</span>
+              </div>
+              <span style={countdownSeparatorStyle}>:</span>
+              <div style={countdownItemStyle}>
+                <span style={countdownValueStyle}>{countdownValues.hours}</span>
+                <span style={countdownLabelStyle}>Hours</span>
+              </div>
+              <span style={countdownSeparatorStyle}>:</span>
+              <div style={countdownItemStyle}>
+                <span style={countdownValueStyle}>{countdownValues.minutes}</span>
+                <span style={countdownLabelStyle}>Mins</span>
+              </div>
+              <span style={countdownSeparatorStyle}>:</span>
+              <div style={countdownItemStyle}>
+                <span style={countdownValueStyle}>{countdownValues.seconds}</span>
+                <span style={countdownLabelStyle}>Secs</span>
+              </div>
+            </div>
           ) : (
-            <span style={{ opacity: 0.7, fontStyle: "italic", fontWeight: "normal" }}>
-              Set an end date to show countdown
-            </span>
+            <div style={{ ...countdownStyle, opacity: 0.5 }}>
+              <span style={{ color: style.discountTextColor, fontStyle: "italic" }}>
+                Set an end date to show countdown
+              </span>
+            </div>
           )}
         </div>
       )}
-      <div style={titleStyle}>{bundle.title || "Bundle Title"}</div>
-      {bundle.subtitle && <div style={subtitleStyle}>{bundle.subtitle}</div>}
 
+      {/* Add-On List */}
       {addOnSets.length === 0 ? (
         <div style={{ opacity: 0.6, textAlign: "center", padding: "20px" }}>
           No add-ons configured
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: style.layoutType === "GRID" ? "row" : "column", gap: "12px", flexWrap: "wrap" }}>
-          {addOnSets.slice(0, 3).map((addOn) => (
-            <div
-              key={addOn.id}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                padding: "8px",
-                backgroundColor: "rgba(0,0,0,0.05)",
-                borderRadius: "4px",
-                flex: style.layoutType === "GRID" ? "1 1 45%" : "none",
-              }}
-            >
-              <input
-                type={bundle.selectionMode === "SINGLE" ? "radio" : "checkbox"}
-                defaultChecked={addOn.isDefaultSelected}
-                readOnly
-              />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 500 }}>
-                  {addOn.productTitle || "Product"}
-                  {addOn.discountValue && style.discountLabelStyle === "BADGE" && (
-                    <span style={badgeStyle}>
-                      {addOn.discountLabel || `${addOn.discountValue}% off`}
+          {addOnSets.slice(0, 3).map((addOn) => {
+            const firstVariant = addOn.selectedVariants?.[0];
+            const originalPrice = firstVariant?.variantPrice ? Number(firstVariant.variantPrice) : null;
+            const hasDiscount = addOn.discountType !== "PERCENTAGE" || (addOn.discountValue && addOn.discountValue > 0);
+            const discountedPrice = originalPrice !== null ? calculateDiscountedPrice(originalPrice, addOn.discountType, addOn.discountValue ? Number(addOn.discountValue) : null) : null;
+            const discountBadge = getDiscountBadge(addOn);
+
+            return (
+              <div
+                key={addOn.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "12px",
+                  padding: "12px",
+                  backgroundColor: "rgba(0,0,0,0.03)",
+                  borderRadius: `${Math.max(4, style.borderRadius / 2)}px`,
+                  flex: style.layoutType === "GRID" ? "1 1 45%" : "none",
+                }}
+              >
+                {/* Checkbox */}
+                <div style={{
+                  flexShrink: 0,
+                  width: "20px",
+                  height: "20px",
+                  border: `2px solid ${style.fontColor}`,
+                  borderRadius: bundle.selectionMode === "SINGLE" ? "50%" : "4px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: addOn.isDefaultSelected ? style.buttonColor : "transparent",
+                }}>
+                  {addOn.isDefaultSelected && (
+                    <div style={{
+                      width: bundle.selectionMode === "SINGLE" ? "8px" : "10px",
+                      height: bundle.selectionMode === "SINGLE" ? "8px" : "10px",
+                      backgroundColor: style.buttonTextColor,
+                      borderRadius: bundle.selectionMode === "SINGLE" ? "50%" : "2px",
+                    }} />
+                  )}
+                </div>
+
+                {/* Product Image */}
+                <div style={{
+                  flexShrink: 0,
+                  width: `${imageSize}px`,
+                  height: `${imageSize}px`,
+                  borderRadius: "6px",
+                  overflow: "hidden",
+                  backgroundColor: "rgba(0,0,0,0.05)",
+                }}>
+                  {addOn.productImageUrl ? (
+                    <img
+                      src={addOn.productImageUrl}
+                      alt={addOn.productTitle || ""}
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  ) : (
+                    <div style={{
+                      width: "100%",
+                      height: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: "linear-gradient(135deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.1) 100%)",
+                    }}>
+                      <svg width="40%" height="40%" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.25)" strokeWidth="1.5">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <polyline points="21 15 16 10 5 21"/>
+                      </svg>
+                    </div>
+                  )}
+                </div>
+
+                {/* Content */}
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px", minWidth: 0 }}>
+                  {/* Title Row */}
+                  <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+                    <span style={{ fontWeight: 600, fontSize: "1em", lineHeight: 1.3 }}>
+                      {addOn.title || addOn.productTitle || "Product"}
                     </span>
+                    {discountBadge && (
+                      <span style={addOn.discountType === "FREE_GIFT" ? freeBadgeStyle : badgeStyle}>
+                        {discountBadge}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Price Row */}
+                  {originalPrice !== null && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                      {hasDiscount && discountedPrice !== originalPrice ? (
+                        <>
+                          <span style={{ textDecoration: "line-through", color: "rgba(0,0,0,0.5)", fontSize: "0.85em" }}>
+                            ${originalPrice.toFixed(2)}
+                          </span>
+                          <span style={{ fontWeight: 700, color: "#27ae60", fontSize: "1.05em" }}>
+                            {discountedPrice === 0 ? "FREE" : `$${discountedPrice.toFixed(2)}`}
+                          </span>
+                        </>
+                      ) : (
+                        <span style={{ fontSize: "0.95em", fontWeight: 500 }}>
+                          ${originalPrice.toFixed(2)}
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {addOnSets.length > 3 && (
             <div style={{ opacity: 0.6, fontSize: "12px" }}>
               +{addOnSets.length - 3} more add-ons
