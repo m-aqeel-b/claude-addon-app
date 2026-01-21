@@ -112,6 +112,22 @@
       </div>
     {% endif %}
   </div>
+
+  {% comment %} Custom CSS from widget config {% endcomment %}
+  {% if widget_style.customCss != blank %}
+    <style>
+      {{ widget_style.customCss }}
+    </style>
+  {% endif %}
+
+  {% comment %} Custom JS from widget config {% endcomment %}
+  {% if widget_style.customJs != blank %}
+    <script>
+      (function() {
+        {{ widget_style.customJs }}
+      })();
+    </script>
+  {% endif %}
 {% endif %}
 
 {% schema %}

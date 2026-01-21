@@ -340,6 +340,10 @@ model WidgetStyle {
   // Countdown timer
   showCountdownTimer Boolean @default(false)
 
+  // Custom CSS and JS
+  customCss String @default("")
+  customJs  String @default("")
+
   @@index([bundleId])
 }
 

@@ -88,6 +88,8 @@ interface StyleState {
   imageSize: ImageSize;
   discountLabelStyle: DiscountLabelStyle;
   showCountdownTimer: boolean;
+  customCss: string;
+  customJs: string;
 }
 
 const defaultFormState: FormState = {
@@ -126,6 +128,8 @@ const defaultStyleState: StyleState = {
   imageSize: "MEDIUM",
   discountLabelStyle: "BADGE",
   showCountdownTimer: false,
+  customCss: "",
+  customJs: "",
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -944,13 +948,15 @@ function StylesModal({ style, onStyleChange, onClose, onReset, title, subtitle, 
   const modalContentStyle: React.CSSProperties = {
     backgroundColor: "#fff",
     borderRadius: "12px",
-    width: "95%",
-    maxWidth: "1100px",
-    maxHeight: "90vh",
+    width: "calc(100% - 48px)",
+    maxWidth: "1800px",
+    height: "calc(100vh - 48px)",
+    maxHeight: "calc(100vh - 48px)",
     overflow: "hidden",
     boxShadow: "0 4px 24px rgba(0, 0, 0, 0.2)",
     display: "flex",
     flexDirection: "column",
+    margin: "24px",
   };
 
   const modalHeaderStyle: React.CSSProperties = {
@@ -979,7 +985,7 @@ function StylesModal({ style, onStyleChange, onClose, onReset, title, subtitle, 
 
   const rightPanelStyle: React.CSSProperties = {
     flex: 1,
-    padding: "20px 24px",
+    padding: "24px 32px",
     backgroundColor: "#f6f6f7",
     overflow: "hidden",
     display: "flex",
@@ -1246,6 +1252,65 @@ function StylesModal({ style, onStyleChange, onClose, onReset, title, subtitle, 
                 </s-stack>
               </s-stack>
             </div>
+
+            {/* Custom CSS and JS Section - Collapsible */}
+            <details style={{ marginBottom: "24px", borderTop: "1px solid #e0e0e0", paddingTop: "16px" }}>
+              <summary style={{
+                cursor: "pointer",
+                fontWeight: 600,
+                fontSize: "14px",
+                marginBottom: "12px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                listStyle: "none",
+              }}>
+                <span>Custom CSS and JS</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transition: "transform 0.2s" }}>
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </summary>
+              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div>
+                  <label style={{ display: "block", marginBottom: "6px", fontSize: "13px", color: "#637381" }}>CSS code</label>
+                  <textarea
+                    value={style.customCss}
+                    onChange={(e) => onStyleChange("customCss", e.target.value)}
+                    placeholder="/* Add your custom CSS here */&#10;.addon-bundle-widget {&#10;  /* your styles */&#10;}"
+                    style={{
+                      width: "100%",
+                      minHeight: "100px",
+                      padding: "12px",
+                      borderRadius: "8px",
+                      border: "1px solid #c9cccf",
+                      fontFamily: "monospace",
+                      fontSize: "12px",
+                      resize: "vertical",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", marginBottom: "6px", fontSize: "13px", color: "#637381" }}>Javascript code</label>
+                  <textarea
+                    value={style.customJs}
+                    onChange={(e) => onStyleChange("customJs", e.target.value)}
+                    placeholder="// Add your custom JavaScript here&#10;// This will run after the widget loads"
+                    style={{
+                      width: "100%",
+                      minHeight: "100px",
+                      padding: "12px",
+                      borderRadius: "8px",
+                      border: "1px solid #c9cccf",
+                      fontFamily: "monospace",
+                      fontSize: "12px",
+                      resize: "vertical",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                </div>
+              </div>
+            </details>
           </div>
 
           {/* Right Panel - Live Preview */}
@@ -1674,6 +1739,29 @@ function StylesModalPreview({ title, subtitle, selectionMode, addOns, style, end
                         </span>
                       )}
                     </div>
+                  )}
+
+                  {/* Variant Selector Dropdown */}
+                  {addOn.selectedVariants && addOn.selectedVariants.length > 1 && (
+                    <select
+                      style={{
+                        padding: "8px 12px",
+                        border: "1px solid rgba(0, 0, 0, 0.15)",
+                        borderRadius: "6px",
+                        fontSize: "inherit",
+                        background: "white",
+                        cursor: "pointer",
+                        maxWidth: "100%",
+                        marginTop: "4px",
+                        color: style.fontColor,
+                      }}
+                    >
+                      {addOn.selectedVariants.map((variant) => (
+                        <option key={variant.shopifyVariantId} value={variant.shopifyVariantId}>
+                          {variant.variantTitle}{variant.variantPrice ? ` - $${Number(variant.variantPrice).toFixed(2)}` : ''}
+                        </option>
+                      ))}
+                    </select>
                   )}
                 </div>
               </div>
