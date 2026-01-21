@@ -39,8 +39,10 @@ import type {
   DiscountLabelStyle,
   BorderStyle,
   WidgetStyle,
-  WidgetTemplate,
 } from "@prisma/client";
+
+// Type for WidgetTemplate until Prisma client is regenerated
+type WidgetTemplate = "DEFAULT" | "MINIMAL" | "MODERN";
 
 interface LoaderData {
   bundle: BundleWithRelations;
@@ -968,11 +970,14 @@ export default function EditBundle() {
     combineWithProductDiscounts: bundle.combineWithProductDiscounts,
     combineWithOrderDiscounts: bundle.combineWithOrderDiscounts,
     combineWithShippingDiscounts: bundle.combineWithShippingDiscounts,
-    deleteAddOnsWithMain: bundle.deleteAddOnsWithMain,
+    deleteAddOnsWithMain: (bundle as Record<string, unknown>).deleteAddOnsWithMain as boolean || false,
   });
 
+  // Type assertion for widgetStyle properties not yet in Prisma client
+  const widgetStyleExt = widgetStyle as Record<string, unknown>;
+
   const [style, setStyle] = useState<StyleState>({
-    template: widgetStyle.template,
+    template: (widgetStyleExt.template as WidgetTemplate) || "DEFAULT",
     backgroundColor: widgetStyle.backgroundColor,
     fontColor: widgetStyle.fontColor,
     buttonColor: widgetStyle.buttonColor,
@@ -992,9 +997,9 @@ export default function EditBundle() {
     marginBottom: widgetStyle.marginBottom,
     imageSize: widgetStyle.imageSize,
     discountLabelStyle: widgetStyle.discountLabelStyle,
-    showCountdownTimer: widgetStyle.showCountdownTimer,
-    customCss: widgetStyle.customCss || "",
-    customJs: widgetStyle.customJs || "",
+    showCountdownTimer: Boolean(widgetStyleExt.showCountdownTimer) || false,
+    customCss: String(widgetStyleExt.customCss || ""),
+    customJs: String(widgetStyleExt.customJs || ""),
   });
 
   const isSubmitting = fetcher.state === "submitting";
@@ -2451,7 +2456,7 @@ function StylesModalPreview({ bundle, addOnSets, style }: StylesModalPreviewProp
           {addOnSets.slice(0, 3).map((addOn) => {
             const firstVariant = addOn.selectedVariants?.[0];
             const originalPrice = firstVariant?.variantPrice ? Number(firstVariant.variantPrice) : null;
-            const hasDiscount = addOn.discountType !== "PERCENTAGE" || (addOn.discountValue && addOn.discountValue > 0);
+            const hasDiscount = addOn.discountType !== "PERCENTAGE" || (addOn.discountValue && Number(addOn.discountValue) > 0);
             const discountedPrice = originalPrice !== null ? calculateDiscountedPrice(originalPrice, addOn.discountType, addOn.discountValue ? Number(addOn.discountValue) : null) : null;
             const discountBadge = getDiscountBadge(addOn);
             const isFreeGift = addOn.discountType === "FREE_GIFT";
@@ -2567,7 +2572,7 @@ function StylesModalPreview({ bundle, addOnSets, style }: StylesModalPreviewProp
                             ${originalPrice.toFixed(2)}
                           </span>
                           <span style={{ fontWeight: 700, color: "#27ae60", fontSize: "1.05em" }}>
-                            {discountedPrice === 0 ? "FREE" : `$${discountedPrice.toFixed(2)}`}
+                            {discountedPrice === 0 ? "FREE" : `$${discountedPrice?.toFixed(2)}`}
                           </span>
                         </>
                       ) : (
