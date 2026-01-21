@@ -20,6 +20,7 @@ import {
   syncProductMetafields,
   clearShopMetafield,
   clearProductMetafields,
+  fetchProductHandles,
 } from "../services/metafield.sync";
 import {
   activateBundleDiscount,
@@ -153,7 +154,12 @@ async function syncBundleMetafields(
       return;
     }
 
-    const widgetConfig = buildWidgetConfig(bundle, addOnSets, widgetStyle);
+    // Fetch product handles for market-specific pricing in the widget
+    const productIds = addOnSets.map((addOn) => addOn.shopifyProductId);
+    const productHandles = await fetchProductHandles(admin, productIds);
+    console.log("[syncBundleMetafields] Fetched", productHandles.size, "product handles for dynamic pricing");
+
+    const widgetConfig = buildWidgetConfig(bundle, addOnSets, widgetStyle, productHandles);
     console.log("[syncBundleMetafields] Built widget config with", widgetConfig.addOns.length, "add-ons");
 
     // Sync WIDGET config to shop/product metafields (for theme display)

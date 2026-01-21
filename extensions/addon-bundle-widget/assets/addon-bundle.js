@@ -52,8 +52,192 @@
     // Initialize countdown timer if present
     initCountdownTimer();
 
+    // Fetch and update prices for current market/region
+    fetchMarketPrices();
+
     // CRITICAL: Override the add to cart behavior
     overrideAddToCart();
+  }
+
+  /**
+   * Fetch market-specific prices for all add-on products
+   * Uses Shopify's AJAX API which automatically returns prices in the current market's currency
+   */
+  async function fetchMarketPrices() {
+    const addonItems = document.querySelectorAll('.addon-item');
+    if (addonItems.length === 0) return;
+
+    // Collect all unique product handles from data attributes
+    const productHandles = new Map(); // handle -> array of addon elements
+
+    addonItems.forEach(item => {
+      const handle = item.dataset.productHandle;
+      if (handle) {
+        if (!productHandles.has(handle)) {
+          productHandles.set(handle, []);
+        }
+        productHandles.get(handle).push(item);
+      }
+    });
+
+    if (productHandles.size === 0) {
+      console.log('[AddonBundle] No product handles found for price fetching');
+      return;
+    }
+
+    console.log('[AddonBundle] Fetching market prices for', productHandles.size, 'products');
+
+    // Fetch each product's data and update prices
+    const fetchPromises = [];
+    productHandles.forEach((items, handle) => {
+      fetchPromises.push(
+        fetchProductPrices(handle)
+          .then(productData => {
+            if (productData) {
+              updateAddonPrices(items, productData);
+            }
+          })
+          .catch(err => {
+            console.error('[AddonBundle] Error fetching prices for', handle, err);
+          })
+      );
+    });
+
+    await Promise.all(fetchPromises);
+    console.log('[AddonBundle] Market prices updated');
+  }
+
+  /**
+   * Fetch product data from Shopify AJAX API
+   * Returns product with market-specific prices
+   */
+  async function fetchProductPrices(handle) {
+    try {
+      const response = await fetch(`/products/${handle}.js`);
+      if (!response.ok) {
+        console.warn('[AddonBundle] Failed to fetch product:', handle, response.status);
+        return null;
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('[AddonBundle] Error fetching product:', handle, error);
+      return null;
+    }
+  }
+
+  /**
+   * Update addon item prices with market-specific data
+   */
+  function updateAddonPrices(addonItems, productData) {
+    if (!productData || !productData.variants) return;
+
+    // Create a map of variant ID to variant data for quick lookup
+    const variantMap = new Map();
+    productData.variants.forEach(variant => {
+      variantMap.set(String(variant.id), variant);
+    });
+
+    addonItems.forEach(item => {
+      const variantId = extractNumericId(item.dataset.variantId);
+      if (!variantId) return;
+
+      const variant = variantMap.get(variantId);
+      if (!variant) {
+        console.warn('[AddonBundle] Variant not found:', variantId, 'in product', productData.handle);
+        return;
+      }
+
+      // Get the market price (in cents, convert to dollars)
+      const marketPrice = variant.price / 100;
+
+      // Update the data attribute with the new price
+      item.dataset.originalPrice = marketPrice;
+
+      // Get discount info from the input element
+      const input = item.querySelector('.addon-item__input');
+      const discountType = input?.dataset.discountType;
+      const discountValue = parseFloat(input?.dataset.discountValue) || 0;
+
+      // Calculate discounted price
+      let discountedPrice = marketPrice;
+      let hasDiscount = false;
+
+      switch (discountType) {
+        case 'PERCENTAGE':
+          if (discountValue > 0) {
+            discountedPrice = marketPrice - (marketPrice * discountValue / 100);
+            hasDiscount = true;
+          }
+          break;
+        case 'FIXED_AMOUNT':
+          if (discountValue > 0) {
+            discountedPrice = Math.max(0, marketPrice - discountValue);
+            hasDiscount = true;
+          }
+          break;
+        case 'FIXED_PRICE':
+          discountedPrice = discountValue;
+          hasDiscount = true;
+          break;
+        case 'FREE_GIFT':
+          discountedPrice = 0;
+          hasDiscount = true;
+          break;
+      }
+
+      item.dataset.discountedPrice = discountedPrice;
+
+      // Update the price display in the DOM
+      const priceRow = item.querySelector('.addon-item__price-row');
+      if (priceRow) {
+        // Format prices using the shop's currency format
+        const formattedOriginal = formatMoney(marketPrice * 100);
+        const formattedDiscounted = discountedPrice === 0 ? 'FREE' : formatMoney(discountedPrice * 100);
+
+        if (hasDiscount) {
+          priceRow.innerHTML = `
+            <span class="addon-item__price addon-item__price--original">${formattedOriginal}</span>
+            <span class="addon-item__price addon-item__price--discounted">${formattedDiscounted}</span>
+          `;
+        } else {
+          priceRow.innerHTML = `
+            <span class="addon-item__price">${formattedOriginal}</span>
+          `;
+        }
+      }
+
+      // Also update variant select dropdown if present
+      const variantSelect = item.querySelector('.addon-item__variant-select');
+      if (variantSelect) {
+        Array.from(variantSelect.options).forEach(option => {
+          const optionVariantId = option.value;
+          const optionVariant = variantMap.get(extractNumericId(optionVariantId));
+          if (optionVariant) {
+            const optionPrice = optionVariant.price / 100;
+            option.dataset.price = optionPrice;
+            // Update option text to show new price
+            const variantTitle = optionVariant.title || optionVariant.option1;
+            option.textContent = `${variantTitle} - ${formatMoney(optionVariant.price)}`;
+          }
+        });
+      }
+    });
+  }
+
+  /**
+   * Format money using Shopify's money format
+   * Falls back to basic formatting if Shopify.formatMoney is not available
+   */
+  function formatMoney(cents) {
+    // Try to use Shopify's built-in formatMoney if available
+    if (window.Shopify && window.Shopify.formatMoney) {
+      return window.Shopify.formatMoney(cents, window.theme?.moneyFormat || '${{amount}}');
+    }
+
+    // Fallback: basic currency formatting
+    const amount = (cents / 100).toFixed(2);
+    const currencySymbol = window.Shopify?.currency?.symbol || '$';
+    return `${currencySymbol}${amount}`;
   }
 
   /**
@@ -251,6 +435,8 @@
 
   /**
    * Update price display for an addon item
+   * @param {Element} addonItem - The addon item element
+   * @param {number} originalPrice - Price in dollars (not cents)
    */
   function updatePriceDisplay(addonItem, originalPrice) {
     const priceRow = addonItem.querySelector('.addon-item__price-row');
@@ -286,22 +472,22 @@
         break;
     }
 
-    // Format prices
-    const formatPrice = (price) => {
-      return new Intl.NumberFormat(undefined, {
-        style: 'currency',
-        currency: window.Shopify?.currency?.active || 'USD'
-      }).format(price);
-    };
+    // Update data attributes
+    addonItem.dataset.originalPrice = originalPrice;
+    addonItem.dataset.discountedPrice = discountedPrice;
+
+    // Format prices (convert to cents for formatMoney)
+    const formattedOriginal = formatMoney(originalPrice * 100);
+    const formattedDiscounted = discountedPrice === 0 ? 'FREE' : formatMoney(discountedPrice * 100);
 
     if (hasDiscount) {
       priceRow.innerHTML = `
-        <span class="addon-item__price addon-item__price--original">${formatPrice(originalPrice)}</span>
-        <span class="addon-item__price addon-item__price--discounted">${discountedPrice === 0 ? 'FREE' : formatPrice(discountedPrice)}</span>
+        <span class="addon-item__price addon-item__price--original">${formattedOriginal}</span>
+        <span class="addon-item__price addon-item__price--discounted">${formattedDiscounted}</span>
       `;
     } else {
       priceRow.innerHTML = `
-        <span class="addon-item__price">${formatPrice(originalPrice)}</span>
+        <span class="addon-item__price">${formattedOriginal}</span>
       `;
     }
   }

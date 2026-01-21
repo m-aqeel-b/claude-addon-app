@@ -52,6 +52,8 @@ interface WidgetConfig {
   endDate: string | null;
   addOns: Array<{
     addOnId: string;
+    shopifyProductId: string;
+    productHandle: string | null; // Product handle for fetching market-specific prices
     productTitle: string | null;
     imageUrl: string | null;
     title: string | null;
@@ -107,11 +109,13 @@ export function buildDiscountConfig(
 
 /**
  * Build widget configuration from bundle data
+ * @param productHandles - Map of Shopify Product GID to product handle
  */
 export function buildWidgetConfig(
   bundle: BundleWithRelations,
   addOnSets: Awaited<ReturnType<typeof getAddOnSets>>,
-  widgetStyle: Awaited<ReturnType<typeof getWidgetStyle>>
+  widgetStyle: Awaited<ReturnType<typeof getWidgetStyle>>,
+  productHandles: Map<string, string> = new Map()
 ): WidgetConfig {
   return {
     bundleId: bundle.id,
@@ -123,6 +127,8 @@ export function buildWidgetConfig(
     endDate: bundle.endDate ? bundle.endDate.toISOString() : null,
     addOns: addOnSets.map((addOn) => ({
       addOnId: addOn.id,
+      shopifyProductId: addOn.shopifyProductId,
+      productHandle: productHandles.get(addOn.shopifyProductId) || null,
       productTitle: addOn.productTitle,
       imageUrl: addOn.productImageUrl || addOn.customImageUrl,
       title: addOn.title,
@@ -160,7 +166,8 @@ export function buildWidgetConfig(
           marginBottom: widgetStyle.marginBottom,
           imageSize: widgetStyle.imageSize,
           discountLabelStyle: widgetStyle.discountLabelStyle,
-          showCountdownTimer: widgetStyle.showCountdownTimer,
+          // Type assertion needed until Prisma client is regenerated
+          showCountdownTimer: Boolean((widgetStyle as Record<string, unknown>).showCountdownTimer) || false,
         }
       : {},
   };
@@ -183,6 +190,57 @@ function getDefaultMessage(discountType: string, value: unknown): string {
     default:
       return "";
   }
+}
+
+/**
+ * Fetch product handles from Shopify for a list of product GIDs
+ * Returns a Map of product GID -> handle
+ */
+export async function fetchProductHandles(
+  admin: AdminGraphQLClient,
+  productIds: string[]
+): Promise<Map<string, string>> {
+  const handles = new Map<string, string>();
+
+  if (productIds.length === 0) {
+    return handles;
+  }
+
+  // Process in chunks of 50 (GraphQL nodes query limit)
+  const chunks = chunkArray(productIds, 50);
+
+  for (const chunk of chunks) {
+    try {
+      const response = await admin.graphql(
+        `#graphql
+        query GetProductHandles($ids: [ID!]!) {
+          nodes(ids: $ids) {
+            ... on Product {
+              id
+              handle
+            }
+          }
+        }`,
+        {
+          variables: { ids: chunk },
+        }
+      );
+
+      const result = await response.json();
+      const nodes = (result.data as { nodes?: Array<{ id: string; handle: string }> })?.nodes || [];
+
+      for (const node of nodes) {
+        if (node?.id && node?.handle) {
+          handles.set(node.id, node.handle);
+        }
+      }
+    } catch (error) {
+      console.error("[Metafield Sync] Error fetching product handles:", error);
+    }
+  }
+
+  console.log("[Metafield Sync] Fetched handles for", handles.size, "products");
+  return handles;
 }
 
 /**
