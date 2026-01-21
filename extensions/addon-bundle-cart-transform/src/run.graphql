@@ -1,0 +1,30 @@
+query Input {
+  cart {
+    lines {
+      id
+      quantity
+      merchandise {
+        ... on ProductVariant {
+          id
+          product {
+            id
+            title
+          }
+        }
+      }
+      # Cart line attributes contain our bundle metadata
+      attribute(key: "_bundle_group_id") {
+        value
+      }
+      bundleId: attribute(key: "_bundle_id") {
+        value
+      }
+      bundleRole: attribute(key: "_bundle_role") {
+        value
+      }
+      deleteAddonsFlag: attribute(key: "_delete_addons_on_main_delete") {
+        value
+      }
+    }
+  }
+}

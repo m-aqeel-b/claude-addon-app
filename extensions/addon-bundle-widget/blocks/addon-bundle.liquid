@@ -36,6 +36,7 @@
     class="addon-bundle-widget"
     data-bundle-id="{{ config.bundleId }}"
     data-product-id="{{ product.id }}"
+    data-delete-addons-on-main-delete="{{ config.deleteAddonsOnMainDelete | default: false }}"
     {% if show_countdown %}
       data-end-date="{{ config.endDate }}"
     {% endif %}

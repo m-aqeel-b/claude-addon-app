@@ -11,9 +11,18 @@
     selectedAddOns: new Map(),
     bundleId: null,
     productId: null,
+    deleteAddonsOnMainDelete: false, // Per-bundle setting for Cart Transform
     initialized: false,
     isInternalRequest: false, // Flag to prevent double-interception
   };
+
+  /**
+   * Generate a unique bundle group ID for this add-to-cart action
+   * This links the main product and its addons together in the cart
+   */
+  function generateBundleGroupId() {
+    return 'bg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+  }
 
   /**
    * Extract numeric ID from Shopify GID
@@ -39,9 +48,13 @@
 
     state.bundleId = widget.dataset.bundleId;
     state.productId = widget.dataset.productId;
+    state.deleteAddonsOnMainDelete = widget.dataset.deleteAddonsOnMainDelete === 'true';
     state.initialized = true;
 
-    console.log('[AddonBundle] Widget initialized', { bundleId: state.bundleId });
+    console.log('[AddonBundle] Widget initialized', {
+      bundleId: state.bundleId,
+      deleteAddonsOnMainDelete: state.deleteAddonsOnMainDelete
+    });
 
     // Setup all listeners
     setupSelectionListeners();
@@ -57,6 +70,9 @@
 
     // CRITICAL: Override the add to cart behavior
     overrideAddToCart();
+
+    // Start cart monitoring for auto-removal of orphaned add-ons
+    initCartMonitoring();
   }
 
   /**
@@ -608,34 +624,70 @@
         }
       }
 
+      // Generate unique bundle group ID for this add-to-cart action
+      const bundleGroupId = generateBundleGroupId();
+
+      // Common bundle properties for tracking
+      const bundleProperties = {
+        _bundle_group_id: bundleGroupId,
+        _bundle_id: state.bundleId
+      };
+
       // Build combined items array
       const allItems = [];
 
+      // Get main product variant ID for nested cart lines
+      let mainVariantId = null;
+
+      // Add main product with bundle properties
       if (mainItem && mainItem.id) {
+        mainVariantId = parseInt(extractNumericId(mainItem.id));
         allItems.push({
-          id: parseInt(extractNumericId(mainItem.id)),
-          quantity: mainItem.quantity
+          id: mainVariantId,
+          quantity: mainItem.quantity,
+          properties: {
+            ...bundleProperties,
+            _bundle_role: 'main'
+          }
         });
       } else if (items.length > 0) {
-        items.forEach(item => {
+        // If multiple items were in original request, mark the first as main
+        mainVariantId = parseInt(extractNumericId(items[0].id));
+        items.forEach((item, index) => {
           allItems.push({
             id: parseInt(extractNumericId(item.id)),
-            quantity: item.quantity || 1
+            quantity: item.quantity || 1,
+            properties: index === 0 ? {
+              ...bundleProperties,
+              _bundle_role: 'main'
+            } : item.properties
           });
         });
       }
 
-      // Add selected add-ons
+      // Add selected add-ons as NESTED CART LINES (children of main product)
+      // When deleteAddonsOnMainDelete is true, use parent_id to create nested relationship
+      // Shopify will automatically remove children when parent is removed
       state.selectedAddOns.forEach(selection => {
         if (selection.variantId) {
-          allItems.push({
+          const addonItem = {
             id: parseInt(selection.variantId),
             quantity: selection.quantity || 1,
             properties: {
+              ...bundleProperties,
+              _bundle_role: 'addon',
               _addon_bundle_id: state.bundleId,
               _addon_main_product: state.productId
             }
-          });
+          };
+
+          // If deleteAddonsOnMainDelete is enabled, create nested cart line
+          // by specifying parent_id (Shopify will auto-remove when parent is removed)
+          if (state.deleteAddonsOnMainDelete && mainVariantId) {
+            addonItem.parent_id = mainVariantId;
+          }
+
+          allItems.push(addonItem);
         }
       });
 
@@ -685,6 +737,15 @@
    * Handle XHR cart add interception
    */
   function handleXHRCartAdd(xhr, body, originalSend) {
+    // Generate unique bundle group ID for this add-to-cart action
+    const bundleGroupId = generateBundleGroupId();
+
+    // Common bundle properties for tracking
+    const bundleProperties = {
+      _bundle_group_id: bundleGroupId,
+      _bundle_id: state.bundleId
+    };
+
     // Parse original body
     let mainItem = null;
 
@@ -713,23 +774,43 @@
     // Build items array
     const items = [];
 
+    // Get main product variant ID for nested cart lines
+    let mainVariantId = null;
+
+    // Add main product with bundle properties
     if (mainItem && mainItem.id) {
+      mainVariantId = parseInt(extractNumericId(mainItem.id));
       items.push({
-        id: parseInt(extractNumericId(mainItem.id)),
-        quantity: mainItem.quantity
+        id: mainVariantId,
+        quantity: mainItem.quantity,
+        properties: {
+          ...bundleProperties,
+          _bundle_role: 'main'
+        }
       });
     }
 
+    // Add addons as NESTED CART LINES (children of main product)
+    // When deleteAddonsOnMainDelete is true, use parent_id to create nested relationship
     state.selectedAddOns.forEach(selection => {
       if (selection.variantId) {
-        items.push({
+        const addonItem = {
           id: parseInt(selection.variantId),
           quantity: selection.quantity || 1,
           properties: {
+            ...bundleProperties,
+            _bundle_role: 'addon',
             _addon_bundle_id: state.bundleId,
             _addon_main_product: state.productId
           }
-        });
+        };
+
+        // If deleteAddonsOnMainDelete is enabled, create nested cart line
+        if (state.deleteAddonsOnMainDelete && mainVariantId) {
+          addonItem.parent_id = mainVariantId;
+        }
+
+        items.push(addonItem);
       }
     });
 
@@ -809,21 +890,49 @@
    * Add main product and add-ons to cart
    */
   async function addAllItemsToCart(mainVariantId, mainQuantity) {
+    // Generate unique bundle group ID for this add-to-cart action
+    const bundleGroupId = generateBundleGroupId();
+
+    // Common bundle properties for tracking
+    const bundleProperties = {
+      _bundle_group_id: bundleGroupId,
+      _bundle_id: state.bundleId
+    };
+
+    // Parse main variant ID
+    const parsedMainVariantId = parseInt(mainVariantId);
+
+    // Add main product with bundle properties
     const items = [{
-      id: parseInt(mainVariantId),
-      quantity: mainQuantity
+      id: parsedMainVariantId,
+      quantity: mainQuantity,
+      properties: {
+        ...bundleProperties,
+        _bundle_role: 'main'
+      }
     }];
 
+    // Add addons as NESTED CART LINES (children of main product)
+    // When deleteAddonsOnMainDelete is true, use parent_id to create nested relationship
     state.selectedAddOns.forEach(selection => {
       if (selection.variantId) {
-        items.push({
+        const addonItem = {
           id: parseInt(selection.variantId),
           quantity: selection.quantity || 1,
           properties: {
+            ...bundleProperties,
+            _bundle_role: 'addon',
             _addon_bundle_id: state.bundleId,
             _addon_main_product: state.productId
           }
-        });
+        };
+
+        // If deleteAddonsOnMainDelete is enabled, create nested cart line
+        if (state.deleteAddonsOnMainDelete && parsedMainVariantId) {
+          addonItem.parent_id = parsedMainVariantId;
+        }
+
+        items.push(addonItem);
       }
     });
 
@@ -916,21 +1025,271 @@
       .catch(console.error);
   }
 
+  // ============================================
+  // CART MONITORING - Auto-remove orphaned add-ons
+  // ============================================
+
+  let cartMonitoringEnabled = false;
+  let lastKnownCart = null;
+  let isProcessingRemoval = false;
+
+  /**
+   * Initialize cart monitoring to detect when main products are removed
+   * and automatically remove their associated add-ons
+   */
+  function initCartMonitoring() {
+    if (cartMonitoringEnabled) return;
+    cartMonitoringEnabled = true;
+
+    console.log('[AddonBundle] Cart monitoring initialized');
+
+    // Get initial cart state
+    fetchCartState();
+
+    // Listen for various cart update events
+    document.addEventListener('cart:refresh', handleCartChange);
+    document.addEventListener('cart:updated', handleCartChange);
+    document.addEventListener('cart:change', handleCartChange);
+
+    // Override cart change/update requests to detect removals
+    overrideCartChangeRequests();
+
+    // Also poll periodically as a fallback (every 3 seconds when on cart page)
+    if (window.location.pathname.includes('/cart')) {
+      setInterval(fetchCartState, 3000);
+    }
+  }
+
+  /**
+   * Override fetch to intercept cart change requests
+   */
+  function overrideCartChangeRequests() {
+    const originalFetch = window.fetch;
+
+    window.fetch = async function(url, options = {}) {
+      const response = await originalFetch.apply(this, arguments);
+
+      // Check if this was a cart update or change request
+      const urlStr = typeof url === 'string' ? url : url?.url || '';
+      if (urlStr.includes('/cart/change') || urlStr.includes('/cart/update')) {
+        // After cart change, check for orphaned add-ons
+        setTimeout(() => {
+          if (!isProcessingRemoval) {
+            checkForOrphanedAddons();
+          }
+        }, 500);
+      }
+
+      return response;
+    };
+  }
+
+  /**
+   * Fetch current cart state
+   */
+  async function fetchCartState() {
+    try {
+      const response = await fetch('/cart.js');
+      if (!response.ok) return;
+
+      const cart = await response.json();
+      const previousCart = lastKnownCart;
+      lastKnownCart = cart;
+
+      // If this isn't the initial load, check for removed items
+      if (previousCart && !isProcessingRemoval) {
+        checkForOrphanedAddons();
+      }
+    } catch (error) {
+      console.error('[AddonBundle] Error fetching cart:', error);
+    }
+  }
+
+  /**
+   * Handle cart change events
+   */
+  function handleCartChange(event) {
+    if (isProcessingRemoval) return;
+
+    // Update cart state if provided in event
+    if (event.detail?.cart) {
+      lastKnownCart = event.detail.cart;
+    }
+
+    // Check for orphaned add-ons after a short delay
+    setTimeout(checkForOrphanedAddons, 300);
+  }
+
+  /**
+   * Check if any add-ons are orphaned (main product removed)
+   * and remove them if deleteAddonsOnMainDelete is true
+   */
+  async function checkForOrphanedAddons() {
+    if (isProcessingRemoval) return;
+
+    try {
+      // Fetch fresh cart data
+      const response = await fetch('/cart.js');
+      if (!response.ok) return;
+
+      const cart = await response.json();
+
+      // Group items by bundle_group_id
+      const bundleGroups = new Map();
+
+      cart.items.forEach((item, index) => {
+        const groupId = item.properties?._bundle_group_id;
+        const role = item.properties?._bundle_role;
+        const deleteFlag = item.properties?._delete_addons_on_main_delete;
+
+        if (!groupId || !role) return;
+
+        if (!bundleGroups.has(groupId)) {
+          bundleGroups.set(groupId, {
+            groupId,
+            deleteAddonsOnMainDelete: deleteFlag === 'true',
+            mainItem: null,
+            addonItems: []
+          });
+        }
+
+        const group = bundleGroups.get(groupId);
+
+        if (role === 'main') {
+          group.mainItem = { ...item, lineIndex: index + 1, key: item.key };
+        } else if (role === 'addon') {
+          group.addonItems.push({ ...item, lineIndex: index + 1, key: item.key });
+        }
+
+        // Use the flag from any item in the group
+        if (deleteFlag === 'true') {
+          group.deleteAddonsOnMainDelete = true;
+        }
+      });
+
+      // Find orphaned add-ons (add-ons without their main product)
+      const addonsToRemove = [];
+
+      bundleGroups.forEach((group, groupId) => {
+        // If main product is missing and flag is true, remove addons
+        if (!group.mainItem && group.deleteAddonsOnMainDelete && group.addonItems.length > 0) {
+          console.log('[AddonBundle] Orphaned add-ons detected for group:', groupId);
+          group.addonItems.forEach(addon => {
+            addonsToRemove.push(addon);
+          });
+        }
+      });
+
+      // Remove orphaned add-ons
+      if (addonsToRemove.length > 0) {
+        await removeOrphanedAddons(addonsToRemove);
+      }
+    } catch (error) {
+      console.error('[AddonBundle] Error checking for orphaned add-ons:', error);
+    }
+  }
+
+  /**
+   * Remove orphaned add-ons from the cart
+   */
+  async function removeOrphanedAddons(addons) {
+    if (addons.length === 0) return;
+
+    isProcessingRemoval = true;
+    console.log('[AddonBundle] Removing', addons.length, 'orphaned add-on(s)');
+
+    try {
+      // Build updates object to set quantities to 0
+      const updates = {};
+      addons.forEach(addon => {
+        // Use the item key for accurate targeting
+        if (addon.key) {
+          updates[addon.key] = 0;
+        }
+      });
+
+      // Make the cart update request
+      const response = await fetch('/cart/update.js', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates })
+      });
+
+      if (response.ok) {
+        console.log('[AddonBundle] Successfully removed orphaned add-ons');
+
+        // Show notification
+        const message = addons.length === 1
+          ? 'Add-on removed (main product was removed)'
+          : `${addons.length} add-ons removed (main product was removed)`;
+        showNotification(message);
+
+        // Refresh cart UI
+        refreshCartUI();
+      } else {
+        console.error('[AddonBundle] Failed to remove add-ons:', await response.text());
+      }
+    } catch (error) {
+      console.error('[AddonBundle] Error removing add-ons:', error);
+    } finally {
+      isProcessingRemoval = false;
+    }
+  }
+
   // Public API
   window.AddonBundle = {
     getSelectedAddOns: () => Array.from(state.selectedAddOns.values()),
     getBundleId: () => state.bundleId,
     getState: () => ({ ...state }),
     addToCart: addAllItemsToCart,
+    checkOrphanedAddons: checkForOrphanedAddons,
+    isCartMonitoringEnabled: () => cartMonitoringEnabled,
   };
+
+  /**
+   * Initialize cart monitoring globally (runs on all pages)
+   * This ensures add-ons are removed even when main product is deleted from cart page
+   */
+  function initGlobalCartMonitoring() {
+    // Always start cart monitoring, even without the widget
+    // This ensures orphaned add-ons are cleaned up on cart page
+    if (!cartMonitoringEnabled) {
+      cartMonitoringEnabled = true;
+      console.log('[AddonBundle] Global cart monitoring initialized');
+
+      // Get initial cart state
+      fetchCartState();
+
+      // Listen for various cart update events
+      document.addEventListener('cart:refresh', handleCartChange);
+      document.addEventListener('cart:updated', handleCartChange);
+      document.addEventListener('cart:change', handleCartChange);
+
+      // Override cart change/update requests
+      overrideCartChangeRequests();
+
+      // Poll more frequently on cart page
+      if (window.location.pathname.includes('/cart')) {
+        setInterval(fetchCartState, 2000);
+      }
+    }
+  }
 
   // Initialize
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', () => {
+      init();
+      // Always init global cart monitoring
+      initGlobalCartMonitoring();
+    });
   } else {
     init();
+    initGlobalCartMonitoring();
   }
 
   // Fallback initialization
-  setTimeout(init, 500);
+  setTimeout(() => {
+    init();
+    initGlobalCartMonitoring();
+  }, 500);
 })();
