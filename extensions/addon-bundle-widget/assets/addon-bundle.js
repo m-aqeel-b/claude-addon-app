@@ -299,13 +299,25 @@
   }
 
   /**
-   * Initialize selections from pre-checked items
+   * Initialize selections from pre-checked items and auto-select FREE_GIFT items
    */
   function initializeSelections() {
+    // Auto-select all FREE_GIFT items (they are always included)
+    document.querySelectorAll('.addon-item--free-gift').forEach(addonItem => {
+      updateSelectionState(addonItem, true);
+      addonItem.classList.add('addon-item--selected');
+      console.log('[AddonBundle] Auto-selected FREE_GIFT:', addonItem.dataset.addonId);
+    });
+
+    // Initialize regular pre-checked items
     document.querySelectorAll('.addon-item__input:checked').forEach(input => {
       const addonItem = input.closest('.addon-item');
-      if (addonItem) updateSelectionState(addonItem, true);
+      // Skip if it's a free gift (already handled above)
+      if (addonItem && !addonItem.classList.contains('addon-item--free-gift')) {
+        updateSelectionState(addonItem, true);
+      }
     });
+
     console.log('[AddonBundle] Initial selections:', state.selectedAddOns.size);
   }
 
@@ -522,8 +534,8 @@
         return originalFetch.apply(this, arguments);
       }
 
-      // Intercept cart/add requests
-      if (urlStr.includes('/cart/add') && state.selectedAddOns.size > 0) {
+      // Intercept cart/add requests (always intercept if there are add-ons, including free gifts)
+      if (urlStr.includes('/cart/add') && (state.selectedAddOns.size > 0 || hasFreeGiftAddons())) {
         console.log('[AddonBundle] Intercepting fetch to /cart/add');
         return handleCartAddIntercept(url, options, originalFetch);
       }
@@ -543,7 +555,7 @@
     XMLHttpRequest.prototype.send = function(body) {
       if (this._addonBundleUrl &&
           this._addonBundleUrl.includes('/cart/add') &&
-          state.selectedAddOns.size > 0) {
+          (state.selectedAddOns.size > 0 || hasFreeGiftAddons())) {
         console.log('[AddonBundle] Intercepting XHR to /cart/add');
         // Add our items to the request
         handleXHRCartAdd(this, body, originalXHRSend);
@@ -643,7 +655,19 @@
 
         if (response.ok) {
           console.log('[AddonBundle] Successfully added all items to cart');
-          showNotification(`Added to cart with ${state.selectedAddOns.size} add-on(s)!`);
+          const freeGiftCount = document.querySelectorAll('.addon-item--free-gift').length;
+          const regularCount = state.selectedAddOns.size - freeGiftCount;
+          let message = 'Added to cart';
+          if (freeGiftCount > 0 && regularCount > 0) {
+            message += ` with ${regularCount} add-on(s) + ${freeGiftCount} free gift(s)!`;
+          } else if (freeGiftCount > 0) {
+            message += ` with ${freeGiftCount} free gift(s)!`;
+          } else if (regularCount > 0) {
+            message += ` with ${regularCount} add-on(s)!`;
+          } else {
+            message += '!';
+          }
+          showNotification(message);
           refreshCartUI();
         }
 
@@ -724,12 +748,19 @@
   }
 
   /**
+   * Check if there are any FREE_GIFT add-ons on the page
+   */
+  function hasFreeGiftAddons() {
+    return document.querySelectorAll('.addon-item--free-gift').length > 0;
+  }
+
+  /**
    * Handle form submit
    */
   function handleFormSubmit(e) {
     const form = e.target;
     if (!form.matches || !form.matches('form[action*="/cart/add"]')) return;
-    if (state.selectedAddOns.size === 0) return;
+    if (state.selectedAddOns.size === 0 && !hasFreeGiftAddons()) return;
 
     e.preventDefault();
     e.stopImmediatePropagation();
@@ -758,7 +789,7 @@
 
     const form = button.closest('form[action*="/cart/add"]');
     if (!form) return;
-    if (state.selectedAddOns.size === 0) return;
+    if (state.selectedAddOns.size === 0 && !hasFreeGiftAddons()) return;
 
     // Check if this is the add to cart button
     const isAddToCart = button.matches('[type="submit"]') ||
