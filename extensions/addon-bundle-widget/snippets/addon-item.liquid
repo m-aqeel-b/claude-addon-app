@@ -10,6 +10,11 @@
 {% endcomment %}
 
 {% liquid
+  assign is_free_gift = false
+  if addon.discountType == 'FREE_GIFT'
+    assign is_free_gift = true
+  endif
+
   assign input_type = 'checkbox'
   if selection_mode == 'SINGLE'
     assign input_type = 'radio'
@@ -110,20 +115,39 @@
   endif
 %}
 
-<div class="addon-item" data-addon-id="{{ addon.addOnId }}" data-variant-id="{{ variant_id }}" data-product-handle="{{ addon.productHandle }}" data-original-price="{{ original_price }}" data-discounted-price="{{ discounted_price }}">
+<div class="addon-item{% if is_free_gift %} addon-item--free-gift{% endif %}" data-addon-id="{{ addon.addOnId }}" data-variant-id="{{ variant_id }}" data-product-handle="{{ addon.productHandle }}" data-original-price="{{ original_price }}" data-discounted-price="{{ discounted_price }}" data-is-free-gift="{{ is_free_gift }}">
   <label class="addon-item__label">
-    <input
-      type="{{ input_type }}"
-      name="addon_selection{% if selection_mode == 'SINGLE' %}_group{% endif %}"
-      value="{{ addon.addOnId }}"
-      class="addon-item__input"
-      data-price="{{ original_price }}"
-      data-discount-type="{{ addon.discountType }}"
-      data-discount-value="{{ addon.discountValue }}"
-      {{ checked_attr }}
-    >
-
-    <span class="addon-item__checkbox-custom"></span>
+    {% if is_free_gift %}
+      {% comment %} Free gift - show included indicator instead of checkbox {% endcomment %}
+      <input
+        type="hidden"
+        name="addon_free_gift"
+        value="{{ addon.addOnId }}"
+        class="addon-item__input addon-item__input--free-gift"
+        data-price="{{ original_price }}"
+        data-discount-type="{{ addon.discountType }}"
+        data-discount-value="{{ addon.discountValue }}"
+        data-auto-add="true"
+      >
+      <span class="addon-item__included-indicator">
+        <svg class="addon-item__included-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </span>
+    {% else %}
+      {% comment %} Regular add-on - show checkbox/radio {% endcomment %}
+      <input
+        type="{{ input_type }}"
+        name="addon_selection{% if selection_mode == 'SINGLE' %}_group{% endif %}"
+        value="{{ addon.addOnId }}"
+        class="addon-item__input"
+        data-price="{{ original_price }}"
+        data-discount-type="{{ addon.discountType }}"
+        data-discount-value="{{ addon.discountValue }}"
+        {{ checked_attr }}
+      >
+      <span class="addon-item__checkbox-custom"></span>
+    {% endif %}
 
     {% comment %} Product Image - always show, with placeholder if no image {% endcomment %}
     <div class="addon-item__image-wrapper addon-item__image-wrapper--{{ image_size_normalized }}">

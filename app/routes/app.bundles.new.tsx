@@ -1639,6 +1639,8 @@ function StylesModalPreview({ title, subtitle, selectionMode, addOns, style, end
             const discountedPrice = originalPrice !== null ? calculateDiscountedPrice(originalPrice, addOn.discountType, addOn.discountValue) : null;
             const discountBadge = getDiscountBadge(addOn);
 
+            const isFreeGift = addOn.discountType === "FREE_GIFT";
+
             return (
               <div
                 key={addOn.id}
@@ -1647,32 +1649,52 @@ function StylesModalPreview({ title, subtitle, selectionMode, addOns, style, end
                   alignItems: "center",
                   gap: "12px",
                   padding: "12px",
-                  backgroundColor: "rgba(0,0,0,0.03)",
+                  backgroundColor: isFreeGift ? "rgba(39, 174, 96, 0.08)" : "rgba(0,0,0,0.03)",
+                  border: isFreeGift ? "1px dashed rgba(39, 174, 96, 0.4)" : "none",
                   borderRadius: `${Math.max(4, style.borderRadius / 2)}px`,
                   flex: style.layoutType === "GRID" ? "1 1 45%" : "none",
                 }}
               >
-                {/* Checkbox */}
-                <div style={{
-                  flexShrink: 0,
-                  width: "20px",
-                  height: "20px",
-                  border: `2px solid ${style.fontColor}`,
-                  borderRadius: selectionMode === "SINGLE" ? "50%" : "4px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor: addOn.isDefaultSelected ? style.buttonColor : "transparent",
-                }}>
-                  {addOn.isDefaultSelected && (
-                    <div style={{
-                      width: selectionMode === "SINGLE" ? "8px" : "10px",
-                      height: selectionMode === "SINGLE" ? "8px" : "10px",
-                      backgroundColor: style.buttonTextColor,
-                      borderRadius: selectionMode === "SINGLE" ? "50%" : "2px",
-                    }} />
-                  )}
-                </div>
+                {/* Checkbox or Free Gift Indicator */}
+                {isFreeGift ? (
+                  /* Free Gift - show always-included checkmark */
+                  <div style={{
+                    flexShrink: 0,
+                    width: "20px",
+                    height: "20px",
+                    borderRadius: "50%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: "#27ae60",
+                  }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  </div>
+                ) : (
+                  /* Regular add-on - show checkbox/radio */
+                  <div style={{
+                    flexShrink: 0,
+                    width: "20px",
+                    height: "20px",
+                    border: `2px solid ${style.fontColor}`,
+                    borderRadius: selectionMode === "SINGLE" ? "50%" : "4px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: addOn.isDefaultSelected ? style.buttonColor : "transparent",
+                  }}>
+                    {addOn.isDefaultSelected && (
+                      <div style={{
+                        width: selectionMode === "SINGLE" ? "8px" : "10px",
+                        height: selectionMode === "SINGLE" ? "8px" : "10px",
+                        backgroundColor: style.buttonTextColor,
+                        borderRadius: selectionMode === "SINGLE" ? "50%" : "2px",
+                      }} />
+                    )}
+                  </div>
+                )}
 
                 {/* Product Image */}
                 <div style={{

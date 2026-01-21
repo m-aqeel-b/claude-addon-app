@@ -182,6 +182,37 @@ input[type="radio"]:checked + .addon-item__checkbox-custom::after {
   outline-offset: 2px;
 }
 
+/* Free Gift Indicator */
+.addon-item--free-gift {
+  background-color: rgba(39, 174, 96, 0.08);
+  border: 1px dashed rgba(39, 174, 96, 0.4);
+}
+
+.addon-item--free-gift .addon-item__label {
+  cursor: default;
+}
+
+.addon-item__included-indicator {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  background-color: #27ae60;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.addon-item__included-icon {
+  width: 12px;
+  height: 12px;
+  color: white;
+}
+
+.addon-item__input--free-gift {
+  display: none;
+}
+
 /* Image Wrapper */
 .addon-item__image-wrapper {
   flex-shrink: 0;

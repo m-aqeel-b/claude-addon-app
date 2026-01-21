@@ -39,8 +39,10 @@ import type {
   DiscountLabelStyle,
   BorderStyle,
   WidgetStyle,
-  WidgetTemplate,
 } from "@prisma/client";
+
+// Type for WidgetTemplate until Prisma client is regenerated
+type WidgetTemplate = "DEFAULT" | "MINIMAL" | "MODERN";
 
 interface LoaderData {
   bundle: BundleWithRelations;
@@ -968,11 +970,14 @@ export default function EditBundle() {
     combineWithProductDiscounts: bundle.combineWithProductDiscounts,
     combineWithOrderDiscounts: bundle.combineWithOrderDiscounts,
     combineWithShippingDiscounts: bundle.combineWithShippingDiscounts,
-    deleteAddOnsWithMain: bundle.deleteAddOnsWithMain,
+    deleteAddOnsWithMain: (bundle as Record<string, unknown>).deleteAddOnsWithMain as boolean || false,
   });
 
+  // Type assertion for widgetStyle properties not yet in Prisma client
+  const widgetStyleExt = widgetStyle as Record<string, unknown>;
+
   const [style, setStyle] = useState<StyleState>({
-    template: widgetStyle.template,
+    template: (widgetStyleExt.template as WidgetTemplate) || "DEFAULT",
     backgroundColor: widgetStyle.backgroundColor,
     fontColor: widgetStyle.fontColor,
     buttonColor: widgetStyle.buttonColor,
@@ -992,9 +997,9 @@ export default function EditBundle() {
     marginBottom: widgetStyle.marginBottom,
     imageSize: widgetStyle.imageSize,
     discountLabelStyle: widgetStyle.discountLabelStyle,
-    showCountdownTimer: widgetStyle.showCountdownTimer,
-    customCss: widgetStyle.customCss || "",
-    customJs: widgetStyle.customJs || "",
+    showCountdownTimer: Boolean(widgetStyleExt.showCountdownTimer) || false,
+    customCss: String(widgetStyleExt.customCss || ""),
+    customJs: String(widgetStyleExt.customJs || ""),
   });
 
   const isSubmitting = fetcher.state === "submitting";
@@ -2451,9 +2456,10 @@ function StylesModalPreview({ bundle, addOnSets, style }: StylesModalPreviewProp
           {addOnSets.slice(0, 3).map((addOn) => {
             const firstVariant = addOn.selectedVariants?.[0];
             const originalPrice = firstVariant?.variantPrice ? Number(firstVariant.variantPrice) : null;
-            const hasDiscount = addOn.discountType !== "PERCENTAGE" || (addOn.discountValue && addOn.discountValue > 0);
+            const hasDiscount = addOn.discountType !== "PERCENTAGE" || (addOn.discountValue && Number(addOn.discountValue) > 0);
             const discountedPrice = originalPrice !== null ? calculateDiscountedPrice(originalPrice, addOn.discountType, addOn.discountValue ? Number(addOn.discountValue) : null) : null;
             const discountBadge = getDiscountBadge(addOn);
+            const isFreeGift = addOn.discountType === "FREE_GIFT";
 
             return (
               <div
@@ -2463,32 +2469,52 @@ function StylesModalPreview({ bundle, addOnSets, style }: StylesModalPreviewProp
                   alignItems: "center",
                   gap: "12px",
                   padding: "12px",
-                  backgroundColor: "rgba(0,0,0,0.03)",
+                  backgroundColor: isFreeGift ? "rgba(39, 174, 96, 0.08)" : "rgba(0,0,0,0.03)",
+                  border: isFreeGift ? "1px dashed rgba(39, 174, 96, 0.4)" : "none",
                   borderRadius: `${Math.max(4, style.borderRadius / 2)}px`,
                   flex: style.layoutType === "GRID" ? "1 1 45%" : "none",
                 }}
               >
-                {/* Checkbox */}
-                <div style={{
-                  flexShrink: 0,
-                  width: "20px",
-                  height: "20px",
-                  border: `2px solid ${style.fontColor}`,
-                  borderRadius: bundle.selectionMode === "SINGLE" ? "50%" : "4px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor: addOn.isDefaultSelected ? style.buttonColor : "transparent",
-                }}>
-                  {addOn.isDefaultSelected && (
-                    <div style={{
-                      width: bundle.selectionMode === "SINGLE" ? "8px" : "10px",
-                      height: bundle.selectionMode === "SINGLE" ? "8px" : "10px",
-                      backgroundColor: style.buttonTextColor,
-                      borderRadius: bundle.selectionMode === "SINGLE" ? "50%" : "2px",
-                    }} />
-                  )}
-                </div>
+                {/* Checkbox or Free Gift Indicator */}
+                {isFreeGift ? (
+                  /* Free Gift - show always-included checkmark */
+                  <div style={{
+                    flexShrink: 0,
+                    width: "20px",
+                    height: "20px",
+                    borderRadius: "50%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: "#27ae60",
+                  }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  </div>
+                ) : (
+                  /* Regular add-on - show checkbox/radio */
+                  <div style={{
+                    flexShrink: 0,
+                    width: "20px",
+                    height: "20px",
+                    border: `2px solid ${style.fontColor}`,
+                    borderRadius: bundle.selectionMode === "SINGLE" ? "50%" : "4px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: addOn.isDefaultSelected ? style.buttonColor : "transparent",
+                  }}>
+                    {addOn.isDefaultSelected && (
+                      <div style={{
+                        width: bundle.selectionMode === "SINGLE" ? "8px" : "10px",
+                        height: bundle.selectionMode === "SINGLE" ? "8px" : "10px",
+                        backgroundColor: style.buttonTextColor,
+                        borderRadius: bundle.selectionMode === "SINGLE" ? "50%" : "2px",
+                      }} />
+                    )}
+                  </div>
+                )}
 
                 {/* Product Image */}
                 <div style={{
@@ -2546,7 +2572,7 @@ function StylesModalPreview({ bundle, addOnSets, style }: StylesModalPreviewProp
                             ${originalPrice.toFixed(2)}
                           </span>
                           <span style={{ fontWeight: 700, color: "#27ae60", fontSize: "1.05em" }}>
-                            {discountedPrice === 0 ? "FREE" : `$${discountedPrice.toFixed(2)}`}
+                            {discountedPrice === 0 ? "FREE" : `$${discountedPrice?.toFixed(2)}`}
                           </span>
                         </>
                       ) : (
