@@ -676,7 +676,7 @@ export default function BundleList() {
   const createBundleButtonRef = useRef<HTMLElement>(null);
 
   const handleCreateBundle = useCallback(() => {
-    navigate("/app/bundles/new");
+    navigate("/app/new");
   }, [navigate]);
 
   // Attach event listener for create bundle button
@@ -703,7 +703,7 @@ export default function BundleList() {
     const params = new URLSearchParams();
     if (search) params.set("q", search);
     if (selectedStatus) params.set("status", selectedStatus);
-    navigate(`/app/bundles?${params.toString()}`);
+    navigate(`/app?${params.toString()}`);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -717,7 +717,7 @@ export default function BundleList() {
     const params = new URLSearchParams();
     if (search) params.set("q", search);
     if (status) params.set("status", status);
-    navigate(`/app/bundles?${params.toString()}`);
+    navigate(`/app?${params.toString()}`);
   };
 
   const openDeleteModal = (bundleId: string, title: string) => {
@@ -1012,7 +1012,7 @@ export default function BundleList() {
                 : "Start increasing your average order value by creating add-on bundles that customers can't resist."}
             </p>
             {!searchQuery && !statusFilter && (
-              <button style={createButtonStyle} onClick={() => navigate("/app/bundles/new")}>
+              <button style={createButtonStyle} onClick={() => navigate("/app/new")}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="12" y1="5" x2="12" y2="19" />
                   <line x1="5" y1="12" x2="19" y2="12" />
@@ -1027,7 +1027,7 @@ export default function BundleList() {
               <BundleListItem
                 key={bundle.id}
                 bundle={bundle}
-                onEdit={() => navigate(`/app/bundles/${bundle.id}`)}
+                onEdit={() => navigate(`/app/${bundle.id}`)}
                 onDuplicate={() => handleDuplicate(bundle.id)}
                 onDelete={() => openDeleteModal(bundle.id, bundle.title)}
                 onToggleStatus={handleToggleStatus}
