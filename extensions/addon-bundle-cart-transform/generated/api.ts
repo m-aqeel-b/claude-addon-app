@@ -2802,7 +2802,7 @@ export enum WeightUnit {
   Pounds = 'POUNDS'
 }
 
-export type InputVariables = Exact<{ [key: string]: never; }>;
+export type RunInputVariables = Exact<{ [key: string]: never; }>;
 
 
-export type Input = { __typename?: 'Input', cart: { __typename?: 'Cart', lines: Array<{ __typename?: 'CartLine', id: string, quantity: number, merchandise: { __typename?: 'CustomProduct' } | { __typename?: 'ProductVariant', id: string, product: { __typename?: 'Product', id: string, title: string } }, attribute?: { __typename?: 'Attribute', value?: string | null } | null, bundleId?: { __typename?: 'Attribute', value?: string | null } | null, bundleRole?: { __typename?: 'Attribute', value?: string | null } | null, deleteAddonsFlag?: { __typename?: 'Attribute', value?: string | null } | null }> } };
+export type RunInput = { __typename?: 'Input', cart: { __typename?: 'Cart', lines: Array<{ __typename?: 'CartLine', id: string, quantity: number, merchandise: { __typename?: 'CustomProduct' } | { __typename?: 'ProductVariant', id: string, product: { __typename?: 'Product', id: string, title: string } }, attribute?: { __typename?: 'Attribute', value?: string | null } | null, bundleId?: { __typename?: 'Attribute', value?: string | null } | null, bundleRole?: { __typename?: 'Attribute', value?: string | null } | null, deleteAddonsFlag?: { __typename?: 'Attribute', value?: string | null } | null }> } };

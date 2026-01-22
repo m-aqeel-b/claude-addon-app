@@ -192,6 +192,13 @@ async function syncBundleMetafields(
         await syncShopMetafields(admin, shopGid, widgetConfig);
       }
     } else if (bundle.targetingType === "SPECIFIC_PRODUCTS") {
+      // IMPORTANT: Clear shop metafield when switching to SPECIFIC targeting
+      // Otherwise the Liquid template falls back to shop metafield and shows widget everywhere
+      if (shopGid) {
+        console.log("[syncBundleMetafields] Clearing shop metafield (switching to SPECIFIC_PRODUCTS)");
+        await clearShopMetafield(admin, shopGid);
+      }
+
       // Sync to specific product metafields
       const productIds = targetedItems
         .filter((item) => item.shopifyResourceType === "Product")
@@ -683,7 +690,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const isDefaultSelected = formData.get("isDefaultSelected") === "true";
     const subscriptionOnly = formData.get("subscriptionOnly") === "true";
     const showQuantitySelector = formData.get("showQuantitySelector") === "true";
-    const maxQuantity = parseInt(formData.get("maxQuantity") as string) || 10;
+    const maxQuantity = parseInt(formData.get("maxQuantity") as string) || 1;
 
     await updateAddOnSet(addOnSetId, {
       discountType,
@@ -1003,7 +1010,17 @@ export default function EditBundle() {
   });
 
   const isSubmitting = fetcher.state === "submitting";
-  const errors = fetcher.data?.errors || {};
+
+  // Local error state that can be cleared when user types
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Sync errors from server response
+  useEffect(() => {
+    if (fetcher.data?.errors) {
+      setErrors(fetcher.data.errors);
+      shopify.toast.show("Please fix the errors and try again", { isError: true });
+    }
+  }, [fetcher.data?.errors, shopify]);
 
   useEffect(() => {
     if (fetcher.data?.action === "bundleUpdated") {
@@ -1060,6 +1077,14 @@ export default function EditBundle() {
 
   const handleFormChange = (field: string, value: string | boolean) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+    // Clear error for this field when user starts typing
+    if (errors[field]) {
+      setErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors[field];
+        return newErrors;
+      });
+    }
   };
 
   const handleStyleChange = (field: keyof StyleState, value: string | number | boolean) => {
@@ -2605,6 +2630,41 @@ function StylesModalPreview({ bundle, addOnSets, style }: StylesModalPreviewProp
                       ))}
                     </select>
                   )}
+
+                  {/* Quantity Selector */}
+                  {addOn.showQuantitySelector && (
+                    <div style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      marginTop: "8px"
+                    }}>
+                      <span style={{
+                        fontSize: "0.85em",
+                        color: style.fontColor,
+                        opacity: 0.8
+                      }}>
+                        Qty:
+                      </span>
+                      <input
+                        type="number"
+                        defaultValue={1}
+                        min={1}
+                        max={addOn.maxQuantity || 1}
+                        style={{
+                          width: "60px",
+                          padding: "6px 10px",
+                          border: "1px solid rgba(0, 0, 0, 0.15)",
+                          borderRadius: "6px",
+                          fontSize: "inherit",
+                          textAlign: "center",
+                          color: style.fontColor,
+                          background: "white",
+                        }}
+                        readOnly
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -2903,7 +2963,16 @@ function ConfigureAddOnSetModal({ addOn, onUpdate, onEditVariants, onClose }: Co
                 label="Maximum quantity"
                 type="number"
                 value={maxQuantity.toString()}
-                onInput={(e: Event) => setMaxQuantity(parseInt((e.target as HTMLInputElement).value) || 1)}
+                onInput={(e: Event) => {
+                  const input = e.target as HTMLInputElement;
+                  // Remove non-numeric characters
+                  const numericValue = input.value.replace(/[^0-9]/g, '');
+                  input.value = numericValue;
+                  const parsed = parseInt(numericValue) || 1;
+                  // Clamp between 1 and 99
+                  const clamped = Math.min(99, Math.max(1, parsed));
+                  setMaxQuantity(clamped);
+                }}
                 min="1"
                 max="99"
               />

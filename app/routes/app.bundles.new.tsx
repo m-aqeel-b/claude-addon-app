@@ -340,17 +340,28 @@ export default function NewBundle() {
   const stylesButtonRef = useRef<HTMLElement>(null);
 
   const isSubmitting = fetcher.state === "submitting";
-  const errors = fetcher.data?.errors || {};
 
-  // Handle validation errors
+  // Local error state that can be cleared when user types
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Sync errors from server response
   useEffect(() => {
     if (fetcher.data?.errors) {
+      setErrors(fetcher.data.errors);
       shopify.toast.show("Please fix the errors and try again", { isError: true });
     }
   }, [fetcher.data, shopify]);
 
   const handleChange = (field: keyof FormState, value: string | boolean) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+    // Clear error for this field when user starts typing
+    if (errors[field]) {
+      setErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors[field];
+        return newErrors;
+      });
+    }
   };
 
   const handleStyleChange = (field: keyof StyleState, value: string | number | boolean) => {
@@ -395,7 +406,7 @@ export default function NewBundle() {
         isDefaultSelected: false,
         subscriptionOnly: false,
         showQuantitySelector: false,
-        maxQuantity: 10,
+        maxQuantity: 1,
         selectedVariants: selectedVariants.map(v => ({
           shopifyVariantId: v.id,
           variantTitle: v.title,
@@ -2063,7 +2074,16 @@ function ConfigureAddOnModal({ addOn, onUpdate, onEditVariants, onClose }: Confi
                 label="Maximum quantity"
                 type="number"
                 value={addOn.maxQuantity.toString()}
-                onInput={(e: Event) => onUpdate({ maxQuantity: parseInt((e.target as HTMLInputElement).value) || 1 })}
+                onInput={(e: Event) => {
+                  const input = e.target as HTMLInputElement;
+                  // Remove non-numeric characters
+                  const numericValue = input.value.replace(/[^0-9]/g, '');
+                  input.value = numericValue;
+                  const parsed = parseInt(numericValue) || 1;
+                  // Clamp between 1 and 99
+                  const clamped = Math.min(99, Math.max(1, parsed));
+                  onUpdate({ maxQuantity: clamped });
+                }}
                 min="1"
                 max="99"
               />
