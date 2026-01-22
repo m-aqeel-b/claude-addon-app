@@ -32,7 +32,10 @@
       "Bash(npm run deploy:*)",
       "Bash(npm run build:*)",
       "mcp__shopify-dev-mcp__validate_theme",
-      "Bash(npx prisma:*)"
+      "Bash(npx prisma:*)",
+      "Bash(npm run typegen:*)",
+      "Bash(git clean:*)",
+      "Bash(ls:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

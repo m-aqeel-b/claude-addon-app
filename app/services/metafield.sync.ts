@@ -50,6 +50,7 @@ interface WidgetConfig {
   targetingType: string;
   startDate: string | null;
   endDate: string | null;
+  deleteAddonsOnMainDelete: boolean; // Cart Transform: remove addons when main product deleted
   addOns: Array<{
     addOnId: string;
     shopifyProductId: string;
@@ -117,6 +118,9 @@ export function buildWidgetConfig(
   widgetStyle: Awaited<ReturnType<typeof getWidgetStyle>>,
   productHandles: Map<string, string> = new Map()
 ): WidgetConfig {
+  // Type assertion for properties that may not be in Prisma client yet
+  const bundleExt = bundle as Record<string, unknown>;
+
   return {
     bundleId: bundle.id,
     title: bundle.title,
@@ -125,6 +129,8 @@ export function buildWidgetConfig(
     targetingType: bundle.targetingType,
     startDate: bundle.startDate ? bundle.startDate.toISOString() : null,
     endDate: bundle.endDate ? bundle.endDate.toISOString() : null,
+    // Cart Transform: controls whether addons are removed when main product is deleted
+    deleteAddonsOnMainDelete: Boolean(bundleExt.deleteAddOnsWithMain) || false,
     addOns: addOnSets.map((addOn) => ({
       addOnId: addOn.id,
       shopifyProductId: addOn.shopifyProductId,
