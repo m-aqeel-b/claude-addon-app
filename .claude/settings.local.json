@@ -35,7 +35,10 @@
       "Bash(npx prisma:*)",
       "Bash(npm run typegen:*)",
       "Bash(git clean:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(shopify app dev:*)",
+      "Bash(timeout:*)",
+      "Bash(cmd /c \"taskkill /PID 3056 /F\")"
     ]
   },
   "enableAllProjectMcpServers": true,

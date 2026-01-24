@@ -6,6 +6,12 @@ type = "theme_app_extension"
 name = "Add-On Bundle Widget"
 handle = "addon-bundle-widget"
 
+# App Embed - loads scripts globally (must be enabled in Theme Editor > App Embeds)
+[[theme_extension.embeds]]
+key = "app-embed"
+name = "Add-On Bundle Widget"
+
+# Product Page Block - the widget block for product pages
 [[theme_extension.files]]
 page_type = "product"
 key = "addon-bundle"
