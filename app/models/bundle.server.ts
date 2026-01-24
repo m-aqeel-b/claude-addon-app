@@ -61,6 +61,8 @@ export interface UpdateBundleInput {
   combineWithShippingDiscounts?: DiscountCombination;
   shopifyDiscountId?: string | null;
   deleteAddOnsWithMain?: boolean;
+  showSoldOutLabel?: boolean;
+  soldOutLabelText?: string;
 }
 
 export interface BundleListFilters {

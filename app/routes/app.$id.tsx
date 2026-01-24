@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback, memo } from "react";
 import { useLoaderData, useFetcher, useNavigate, useParams, useSearchParams } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -20,7 +20,7 @@ import {
   syncProductMetafields,
   clearShopMetafield,
   clearProductMetafields,
-  fetchProductHandles,
+  fetchProductInfo,
 } from "../services/metafield.sync";
 import {
   activateBundleDiscount,
@@ -176,13 +176,20 @@ async function syncBundleMetafields(
       return;
     }
 
-    // Fetch product handles for market-specific pricing in the widget
+    // Fetch product info (handles and status) for market-specific pricing and filtering
     const productIds = addOnSets.map((addOn) => addOn.shopifyProductId);
-    const productHandles = await fetchProductHandles(admin, productIds);
-    console.log("[syncBundleMetafields] Fetched", productHandles.size, "product handles for dynamic pricing");
+    const productInfo = await fetchProductInfo(admin, productIds);
+    console.log("[syncBundleMetafields] Fetched info for", productInfo.size, "products");
 
-    const widgetConfig = buildWidgetConfig(bundle, addOnSets, widgetStyle, productHandles);
-    console.log("[syncBundleMetafields] Built widget config with", widgetConfig.addOns.length, "add-ons");
+    // Build widget config - this will filter out Draft/Unlisted products for the storefront
+    // Create handles map for backwards compatibility
+    const productHandles = new Map<string, string>();
+    for (const [id, info] of productInfo) {
+      productHandles.set(id, info.handle);
+    }
+
+    const widgetConfig = buildWidgetConfig(bundle, addOnSets, widgetStyle, productHandles, productInfo);
+    console.log("[syncBundleMetafields] Built widget config with", widgetConfig.addOns.length, "add-ons (filtered for Active products)");
 
     // Sync WIDGET config to shop/product metafields (for theme display)
     if (bundle.targetingType === "ALL_PRODUCTS") {
@@ -233,7 +240,7 @@ async function syncBundleMetafields(
 }
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
   const bundleId = params.id!;
 
@@ -248,15 +255,24 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     getTargetedItems(bundleId),
   ]);
 
-  // Convert Decimal fields to numbers for proper JSON serialization
-  const addOnSets = addOnSetsRaw.map(addOn => ({
-    ...addOn,
-    discountValue: addOn.discountValue ? Number(addOn.discountValue) : null,
-    selectedVariants: addOn.selectedVariants.map(v => ({
-      ...v,
-      variantPrice: v.variantPrice ? Number(v.variantPrice) : null,
-    })),
-  }));
+  // Fetch product statuses from Shopify for admin UI display
+  const productIds = addOnSetsRaw.map((addOn) => addOn.shopifyProductId);
+  const productInfo = productIds.length > 0 ? await fetchProductInfo(admin, productIds) : new Map();
+
+  // Convert Decimal fields to numbers and add product status for admin display
+  const addOnSets = addOnSetsRaw.map(addOn => {
+    const info = productInfo.get(addOn.shopifyProductId);
+    return {
+      ...addOn,
+      discountValue: addOn.discountValue ? Number(addOn.discountValue) : null,
+      selectedVariants: addOn.selectedVariants.map(v => ({
+        ...v,
+        variantPrice: v.variantPrice ? Number(v.variantPrice) : null,
+      })),
+      // Product status for admin UI display (ACTIVE, DRAFT, ARCHIVED)
+      productStatus: info?.status || "UNKNOWN",
+    };
+  });
 
   return { bundle, addOnSets, widgetStyle, targetedItems };
 };
@@ -282,6 +298,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const combineWithOrderDiscounts = formData.get("combineWithOrderDiscounts") as DiscountCombination;
     const combineWithShippingDiscounts = formData.get("combineWithShippingDiscounts") as DiscountCombination;
     const deleteAddOnsWithMain = formData.get("deleteAddOnsWithMain") === "true";
+    const showSoldOutLabel = formData.get("showSoldOutLabel") === "true";
+    const soldOutLabelText = formData.get("soldOutLabelText") as string;
 
     const errors: Record<string, string> = {};
 
@@ -313,6 +331,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       combineWithOrderDiscounts,
       combineWithShippingDiscounts,
       deleteAddOnsWithMain,
+      showSoldOutLabel,
+      soldOutLabelText: soldOutLabelText || "Sold out",
     });
 
     // Sync metafields after bundle update
@@ -359,6 +379,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const combineWithOrderDiscounts = formData.get("combineWithOrderDiscounts") as DiscountCombination;
     const combineWithShippingDiscounts = formData.get("combineWithShippingDiscounts") as DiscountCombination;
     const deleteAddOnsWithMain = formData.get("deleteAddOnsWithMain") === "true";
+    const showSoldOutLabel = formData.get("showSoldOutLabel") === "true";
+    const soldOutLabelText = formData.get("soldOutLabelText") as string;
 
     // Parse JSON data for batched changes
     const newTargetedItems = JSON.parse(formData.get("newTargetedItems") as string || "[]");
@@ -399,6 +421,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       combineWithOrderDiscounts,
       combineWithShippingDiscounts,
       deleteAddOnsWithMain,
+      showSoldOutLabel,
+      soldOutLabelText: soldOutLabelText || "Sold out",
     });
 
     // 2. Process deleted targeted items
@@ -882,6 +906,7 @@ interface LocalAddOnSet {
   }>;
   isNew?: boolean; // Track if this is a new item not yet saved
   isModified?: boolean; // Track if this item has been modified
+  productStatus?: string; // Shopify product status: ACTIVE, DRAFT, ARCHIVED
 }
 
 export default function EditBundle() {
@@ -929,6 +954,8 @@ export default function EditBundle() {
         variantSku: v.variantSku,
         variantPrice: v.variantPrice ? Number(v.variantPrice) : null,
       })),
+      // Product status from Shopify (ACTIVE, DRAFT, ARCHIVED)
+      productStatus: (addOn as Record<string, unknown>).productStatus as string | undefined,
     }))
   );
   const [deletedAddOnSetIds, setDeletedAddOnSetIds] = useState<string[]>([]);
@@ -966,6 +993,9 @@ export default function EditBundle() {
   const stylesButtonRef = useRef<HTMLElement>(null);
   const toggleStatusButtonRef = useRef<HTMLElement>(null);
 
+  // Type assertion for bundle properties
+  const bundleExt = bundle as Record<string, unknown>;
+
   const [form, setForm] = useState({
     title: bundle.title,
     subtitle: bundle.subtitle || "",
@@ -977,7 +1007,9 @@ export default function EditBundle() {
     combineWithProductDiscounts: bundle.combineWithProductDiscounts,
     combineWithOrderDiscounts: bundle.combineWithOrderDiscounts,
     combineWithShippingDiscounts: bundle.combineWithShippingDiscounts,
-    deleteAddOnsWithMain: (bundle as Record<string, unknown>).deleteAddOnsWithMain as boolean || false,
+    deleteAddOnsWithMain: bundleExt.deleteAddOnsWithMain as boolean || false,
+    showSoldOutLabel: bundleExt.showSoldOutLabel as boolean || false,
+    soldOutLabelText: (bundleExt.soldOutLabelText as string) || "Sold out",
   });
 
   // Type assertion for widgetStyle properties not yet in Prisma client
@@ -1101,8 +1133,9 @@ export default function EditBundle() {
       {
         intent: "saveAllChanges",
         ...form,
-        // Convert boolean to string for form submission
+        // Convert booleans to string for form submission
         deleteAddOnsWithMain: form.deleteAddOnsWithMain ? "true" : "false",
+        showSoldOutLabel: form.showSoldOutLabel ? "true" : "false",
         // Targeted items changes
         newTargetedItems: JSON.stringify(newTargetedItems),
         deletedTargetedItemIds: JSON.stringify(deletedTargetedItemIds),
@@ -1164,7 +1197,11 @@ export default function EditBundle() {
       type: "product",
       multiple: false,
       selectionIds: [],
-      filter: { variants: true }, // Enable variant selection in the picker
+      filter: {
+        variants: true, // Enable variant selection in the picker
+        draft: false, // Exclude draft products - only show Active products
+        archived: false, // Exclude archived products
+      },
     });
     if (selected && selected.length > 0) {
       const product = selected[0] as {
@@ -1223,7 +1260,11 @@ export default function EditBundle() {
       type: "product",
       multiple: false,
       selectionIds: [{ id: productId, variants: currentVariantIds.map(id => ({ id })) }],
-      filter: { variants: true },
+      filter: {
+        variants: true,
+        draft: false, // Exclude draft products
+        archived: false, // Exclude archived products
+      },
     });
 
     if (selected && selected.length > 0) {
@@ -1670,15 +1711,37 @@ export default function EditBundle() {
 
       {/* Status Section - Aside */}
       <s-section slot="aside" heading="Status">
-        <s-select
-          label="Bundle status"
-          value={form.status}
-          onInput={(e: Event) => handleFormChange("status", (e.target as HTMLSelectElement).value)}
-        >
-          <s-option value="DRAFT" selected={form.status === "DRAFT"}>Draft</s-option>
-          <s-option value="ACTIVE" selected={form.status === "ACTIVE"}>Active</s-option>
-          <s-option value="ARCHIVED" selected={form.status === "ARCHIVED"}>Archived</s-option>
-        </s-select>
+        <s-stack direction="block" gap="base">
+          <s-select
+            label="Bundle status"
+            value={form.status}
+            onInput={(e: Event) => handleFormChange("status", (e.target as HTMLSelectElement).value)}
+          >
+            <s-option value="DRAFT" selected={form.status === "DRAFT"}>Draft</s-option>
+            <s-option value="ACTIVE" selected={form.status === "ACTIVE"}>Active</s-option>
+            <s-option value="ARCHIVED" selected={form.status === "ARCHIVED"}>Archived</s-option>
+          </s-select>
+
+          <div style={{ borderTop: "1px solid #e0e0e0", margin: "12px 0" }} />
+
+          <s-checkbox
+            label="Show as Sold Out"
+            checked={form.showSoldOutLabel}
+            onChange={(e: Event) => handleFormChange("showSoldOutLabel", (e.target as HTMLInputElement).checked)}
+          />
+          <s-text variant="bodySm" color="subdued">
+            When enabled, out-of-stock add-on variants will be visually disabled with a label.
+          </s-text>
+
+          {form.showSoldOutLabel && (
+            <s-text-field
+              label="Label Title"
+              value={form.soldOutLabelText}
+              onInput={(e: Event) => handleFormChange("soldOutLabelText", (e.target as HTMLInputElement).value)}
+              placeholder="Sold out"
+            />
+          )}
+        </s-stack>
       </s-section>
 
       {/* Customer Selection Section - Aside */}
@@ -1762,6 +1825,57 @@ interface StylesModalProps {
   bundle: BundleWithRelations;
   addOnSets: AddOnSetWithVariants[];
 }
+
+// Stable ColorPickerInput component - defined outside to prevent re-creation on parent re-renders
+const ColorPickerInput = memo(function ColorPickerInput({
+  label,
+  value,
+  onChange
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const containerStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    marginTop: "4px",
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: "32px",
+    height: "32px",
+    padding: "0",
+    borderRadius: "6px",
+    border: "1px solid #8c9196",
+    backgroundColor: "#fff",
+    cursor: "pointer",
+    flexShrink: 0,
+  };
+
+  const codeStyle: React.CSSProperties = {
+    fontSize: "13px",
+    fontFamily: "monospace",
+    color: "#616161",
+    textTransform: "uppercase",
+  };
+
+  return (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <s-text variant="bodySm" color="subdued">{label}</s-text>
+      <div style={containerStyle}>
+        <input
+          type="color"
+          style={inputStyle}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <span style={codeStyle}>{value}</span>
+      </div>
+    </div>
+  );
+});
 
 function StylesModal({ style, onStyleChange, onClose, onSave, onReset, bundle, addOnSets }: StylesModalProps) {
   const resetButtonRef = useRef<HTMLElement>(null);
@@ -1853,49 +1967,9 @@ function StylesModal({ style, onStyleChange, onClose, onSave, onReset, bundle, a
     backgroundColor: "#fff",
   };
 
-  const colorPickerContainerStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    marginTop: "4px",
-  };
-
-  const colorInputStyle: React.CSSProperties = {
-    width: "32px",
-    height: "32px",
-    padding: "0",
-    borderRadius: "6px",
-    border: "1px solid #8c9196",
-    backgroundColor: "#fff",
-    cursor: "pointer",
-    flexShrink: 0,
-  };
-
-  const colorCodeStyle: React.CSSProperties = {
-    fontSize: "13px",
-    fontFamily: "monospace",
-    color: "#616161",
-    textTransform: "uppercase",
-  };
-
-  const ColorPicker = ({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) => (
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <s-text variant="bodySm" color="subdued">{label}</s-text>
-      <div style={colorPickerContainerStyle}>
-        <input
-          type="color"
-          style={colorInputStyle}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-        />
-        <span style={colorCodeStyle}>{value}</span>
-      </div>
-    </div>
-  );
-
   return (
-    <div style={modalOverlayStyle} onClick={onClose}>
-      <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
+    <div style={modalOverlayStyle} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={modalContentStyle} onMouseDown={(e) => e.stopPropagation()}>
         <div style={modalHeaderStyle}>
           <s-text variant="headingMd">Widget Styles</s-text>
           <s-button variant="tertiary" onClick={onClose}>✕</s-button>
@@ -1922,19 +1996,19 @@ function StylesModal({ style, onStyleChange, onClose, onSave, onReset, bundle, a
               <s-stack direction="block" gap="tight">
                 <s-text variant="headingSm">Colors</s-text>
                 <s-stack direction="inline" gap="base">
-                  <ColorPicker label="Background" value={style.backgroundColor} onChange={(v) => onStyleChange("backgroundColor", v)} />
-                  <ColorPicker label="Font" value={style.fontColor} onChange={(v) => onStyleChange("fontColor", v)} />
+                  <ColorPickerInput label="Background" value={style.backgroundColor} onChange={(v) => onStyleChange("backgroundColor", v)} />
+                  <ColorPickerInput label="Font" value={style.fontColor} onChange={(v) => onStyleChange("fontColor", v)} />
                 </s-stack>
                 <s-stack direction="inline" gap="base">
-                  <ColorPicker label="Button" value={style.buttonColor} onChange={(v) => onStyleChange("buttonColor", v)} />
-                  <ColorPicker label="Button text" value={style.buttonTextColor} onChange={(v) => onStyleChange("buttonTextColor", v)} />
+                  <ColorPickerInput label="Button" value={style.buttonColor} onChange={(v) => onStyleChange("buttonColor", v)} />
+                  <ColorPickerInput label="Button text" value={style.buttonTextColor} onChange={(v) => onStyleChange("buttonTextColor", v)} />
                 </s-stack>
                 <s-stack direction="inline" gap="base">
-                  <ColorPicker label="Discount badge" value={style.discountBadgeColor} onChange={(v) => onStyleChange("discountBadgeColor", v)} />
-                  <ColorPicker label="Discount text" value={style.discountTextColor} onChange={(v) => onStyleChange("discountTextColor", v)} />
+                  <ColorPickerInput label="Discount badge" value={style.discountBadgeColor} onChange={(v) => onStyleChange("discountBadgeColor", v)} />
+                  <ColorPickerInput label="Discount text" value={style.discountTextColor} onChange={(v) => onStyleChange("discountTextColor", v)} />
                 </s-stack>
                 <s-stack direction="inline" gap="base">
-                  <ColorPicker label="Border" value={style.borderColor} onChange={(v) => onStyleChange("borderColor", v)} />
+                  <ColorPickerInput label="Border" value={style.borderColor} onChange={(v) => onStyleChange("borderColor", v)} />
                   <div style={{ flex: 1 }}></div>
                 </s-stack>
               </s-stack>
@@ -2822,10 +2896,22 @@ function AddOnSetCard({ addOn, isUnsaved, onDelete, onUpdate, onEditVariants }: 
 
           {/* Product Title and Discount Info */}
           <div style={{ flex: 1 }}>
-            <s-text variant="headingSm">{addOn.productTitle || "Untitled product"}</s-text>
-            <div style={{ marginTop: "4px", display: "flex", gap: "8px", alignItems: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <s-text variant="headingSm">{addOn.productTitle || "Untitled product"}</s-text>
+              {/* Product Status Badge - shows when product is not Active */}
+              {addOn.productStatus && addOn.productStatus !== "ACTIVE" && (
+                <s-badge tone="warning">
+                  {addOn.productStatus === "DRAFT" ? "Draft" : addOn.productStatus === "ARCHIVED" ? "Archived" : addOn.productStatus}
+                </s-badge>
+              )}
+            </div>
+            <div style={{ marginTop: "4px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
               <span style={discountBadgeStyle}>{getDiscountText()}</span>
               {isUnsaved && <s-badge tone="warning">Unsaved</s-badge>}
+              {/* Warning for non-Active products */}
+              {addOn.productStatus && addOn.productStatus !== "ACTIVE" && (
+                <s-text variant="bodySm" tone="subdued">Not visible on storefront</s-text>
+              )}
             </div>
           </div>
 

@@ -885,3 +885,149 @@ input[type="radio"]:checked + .addon-item__checkbox-custom::after {
     font-size: 0.9em;
   }
 }
+
+/* ==========================================
+   SOLD-OUT STATES
+   Styles for out-of-stock add-on products
+   ========================================== */
+
+/* Sold-out item - base state */
+.addon-item--sold-out {
+  position: relative;
+}
+
+/* All variants sold out - full overlay */
+.addon-item--all-sold-out {
+  pointer-events: none;
+  user-select: none;
+}
+
+.addon-item--all-sold-out .addon-item__label {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Sold-out overlay */
+.addon-item__sold-out-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  border-radius: inherit;
+  backdrop-filter: blur(1px);
+}
+
+/* Sold-out label */
+.addon-item__sold-out-label {
+  background: rgba(0, 0, 0, 0.75);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 0.85em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Disabled checkbox appearance */
+.addon-item__checkbox-custom--disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Sold-out image wrapper - grayscale effect */
+.addon-item--all-sold-out .addon-item__image-wrapper {
+  filter: grayscale(50%);
+}
+
+/* Sold-out variant select */
+.addon-item__variant-select--has-sold-out option[data-sold-out="true"] {
+  color: #999;
+  font-style: italic;
+}
+
+/* Disable hover effects for sold-out items */
+.addon-item--all-sold-out:hover {
+  background: rgba(0, 0, 0, 0.03);
+  transform: none;
+  box-shadow: none;
+}
+
+/* ==========================================
+   SOLD-OUT STATES - MINIMAL TEMPLATE
+   ========================================== */
+
+.addon-bundle-widget--minimal .addon-item__sold-out-overlay {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(2px);
+}
+
+.addon-bundle-widget--minimal .addon-item__sold-out-label {
+  background: transparent;
+  color: var(--addon-font-color);
+  border: 1px solid currentColor;
+  font-weight: 500;
+  font-size: 0.75em;
+  padding: 6px 12px;
+  border-radius: 3px;
+}
+
+.addon-bundle-widget--minimal .addon-item--all-sold-out {
+  border-color: rgba(0, 0, 0, 0.05);
+}
+
+/* ==========================================
+   SOLD-OUT STATES - MODERN TEMPLATE
+   ========================================== */
+
+.addon-bundle-widget--modern .addon-item__sold-out-overlay {
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.85) 0%,
+    rgba(255, 255, 255, 0.75) 100%
+  );
+  backdrop-filter: blur(3px);
+}
+
+.addon-bundle-widget--modern .addon-item__sold-out-label {
+  background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+  color: white;
+  padding: 10px 20px;
+  border-radius: 20px;
+  font-size: 0.8em;
+  font-weight: 700;
+  letter-spacing: 1px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.addon-bundle-widget--modern .addon-item--all-sold-out {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.addon-bundle-widget--modern .addon-item--all-sold-out:hover {
+  transform: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+/* ==========================================
+   RESPONSIVE SOLD-OUT STYLES
+   ========================================== */
+
+@media (max-width: 480px) {
+  .addon-item__sold-out-label {
+    padding: 6px 12px;
+    font-size: 0.75em;
+  }
+
+  .addon-bundle-widget--modern .addon-item__sold-out-label {
+    padding: 8px 16px;
+    font-size: 0.7em;
+  }
+}

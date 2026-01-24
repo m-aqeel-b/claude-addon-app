@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback, memo } from "react";
 import { useFetcher, redirect } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -8,7 +8,7 @@ import { createBundle, bundleTitleExists, getBundle } from "../models/bundle.ser
 import { createAddOnSet, setVariantsForSet } from "../models/addOnSet.server";
 import { getOrCreateWidgetStyle, updateWidgetStyle } from "../models/widgetStyle.server";
 import { addTargetedItem } from "../models/targeting.server";
-import { buildWidgetConfig, syncShopMetafields, syncProductMetafields } from "../services/metafield.sync";
+import { buildWidgetConfig, syncShopMetafields, syncProductMetafields, fetchProductInfo } from "../services/metafield.sync";
 import { activateBundleDiscount } from "../services/discount.sync";
 import type {
   BundleStatus,
@@ -265,7 +265,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           const { getAddOnSets } = await import("../models/addOnSet.server");
           const dbAddOnSets = await getAddOnSets(bundle.id);
 
-          const widgetConfig = buildWidgetConfig(fullBundle, dbAddOnSets, updatedWidgetStyle);
+          // Fetch product info (handles and status) for filtering and pricing
+          const productIds = dbAddOnSets.map((addOn) => addOn.shopifyProductId);
+          const productInfo = await fetchProductInfo(admin, productIds);
+
+          // Create handles map for backwards compatibility
+          const productHandles = new Map<string, string>();
+          for (const [id, info] of productInfo) {
+            productHandles.set(id, info.handle);
+          }
+
+          const widgetConfig = buildWidgetConfig(fullBundle, dbAddOnSets, updatedWidgetStyle, productHandles, productInfo);
 
           // Get shop GID
           const shopResponse = await admin.graphql(`query { shop { id } }`);
@@ -377,7 +387,11 @@ export default function NewBundle() {
       type: "product",
       multiple: false,
       selectionIds: [],
-      filter: { variants: true },
+      filter: {
+        variants: true,
+        draft: false, // Only show Active products - exclude Draft
+        archived: false, // Exclude Archived products
+      },
     });
 
     if (selected && selected.length > 0) {
@@ -437,7 +451,11 @@ export default function NewBundle() {
       type: "product",
       multiple: false,
       selectionIds: [{ id: productId, variants: currentVariantIds.map(id => ({ id })) }],
-      filter: { variants: true },
+      filter: {
+        variants: true,
+        draft: false, // Only show Active products
+        archived: false, // Exclude Archived products
+      },
     });
 
     if (selected && selected.length > 0) {
@@ -922,6 +940,57 @@ interface StylesModalProps {
   endDate: string;
 }
 
+// Stable ColorPickerInput component - defined outside to prevent re-creation on parent re-renders
+const ColorPickerInput = memo(function ColorPickerInput({
+  label,
+  value,
+  onChange
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const containerStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    marginTop: "4px",
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: "32px",
+    height: "32px",
+    padding: "0",
+    borderRadius: "6px",
+    border: "1px solid #8c9196",
+    backgroundColor: "#fff",
+    cursor: "pointer",
+    flexShrink: 0,
+  };
+
+  const codeStyle: React.CSSProperties = {
+    fontSize: "13px",
+    fontFamily: "monospace",
+    color: "#616161",
+    textTransform: "uppercase",
+  };
+
+  return (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <s-text variant="bodySm" color="subdued">{label}</s-text>
+      <div style={containerStyle}>
+        <input
+          type="color"
+          style={inputStyle}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <span style={codeStyle}>{value}</span>
+      </div>
+    </div>
+  );
+});
+
 function StylesModal({ style, onStyleChange, onClose, onReset, title, subtitle, selectionMode, addOns, endDate }: StylesModalProps) {
   const resetButtonRef = useRef<HTMLElement>(null);
   const doneButtonRef = useRef<HTMLElement>(null);
@@ -1012,49 +1081,9 @@ function StylesModal({ style, onStyleChange, onClose, onReset, title, subtitle, 
     backgroundColor: "#fff",
   };
 
-  const colorPickerContainerStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    marginTop: "4px",
-  };
-
-  const colorInputStyle: React.CSSProperties = {
-    width: "32px",
-    height: "32px",
-    padding: "0",
-    borderRadius: "6px",
-    border: "1px solid #8c9196",
-    backgroundColor: "#fff",
-    cursor: "pointer",
-    flexShrink: 0,
-  };
-
-  const colorCodeStyle: React.CSSProperties = {
-    fontSize: "13px",
-    fontFamily: "monospace",
-    color: "#616161",
-    textTransform: "uppercase",
-  };
-
-  const ColorPicker = ({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) => (
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <s-text variant="bodySm" color="subdued">{label}</s-text>
-      <div style={colorPickerContainerStyle}>
-        <input
-          type="color"
-          style={colorInputStyle}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-        />
-        <span style={colorCodeStyle}>{value}</span>
-      </div>
-    </div>
-  );
-
   return (
-    <div style={modalOverlayStyle} onClick={onClose}>
-      <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
+    <div style={modalOverlayStyle} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={modalContentStyle} onMouseDown={(e) => e.stopPropagation()}>
         <div style={modalHeaderStyle}>
           <s-text variant="headingMd">Widget Styles</s-text>
           <s-button variant="tertiary" onClick={onClose}>✕</s-button>
@@ -1081,19 +1110,19 @@ function StylesModal({ style, onStyleChange, onClose, onReset, title, subtitle, 
               <s-stack direction="block" gap="tight">
                 <s-text variant="headingSm">Colors</s-text>
                 <s-stack direction="inline" gap="base">
-                  <ColorPicker label="Background" value={style.backgroundColor} onChange={(v) => onStyleChange("backgroundColor", v)} />
-                  <ColorPicker label="Font" value={style.fontColor} onChange={(v) => onStyleChange("fontColor", v)} />
+                  <ColorPickerInput label="Background" value={style.backgroundColor} onChange={(v) => onStyleChange("backgroundColor", v)} />
+                  <ColorPickerInput label="Font" value={style.fontColor} onChange={(v) => onStyleChange("fontColor", v)} />
                 </s-stack>
                 <s-stack direction="inline" gap="base">
-                  <ColorPicker label="Button" value={style.buttonColor} onChange={(v) => onStyleChange("buttonColor", v)} />
-                  <ColorPicker label="Button text" value={style.buttonTextColor} onChange={(v) => onStyleChange("buttonTextColor", v)} />
+                  <ColorPickerInput label="Button" value={style.buttonColor} onChange={(v) => onStyleChange("buttonColor", v)} />
+                  <ColorPickerInput label="Button text" value={style.buttonTextColor} onChange={(v) => onStyleChange("buttonTextColor", v)} />
                 </s-stack>
                 <s-stack direction="inline" gap="base">
-                  <ColorPicker label="Discount badge" value={style.discountBadgeColor} onChange={(v) => onStyleChange("discountBadgeColor", v)} />
-                  <ColorPicker label="Discount text" value={style.discountTextColor} onChange={(v) => onStyleChange("discountTextColor", v)} />
+                  <ColorPickerInput label="Discount badge" value={style.discountBadgeColor} onChange={(v) => onStyleChange("discountBadgeColor", v)} />
+                  <ColorPickerInput label="Discount text" value={style.discountTextColor} onChange={(v) => onStyleChange("discountTextColor", v)} />
                 </s-stack>
                 <s-stack direction="inline" gap="base">
-                  <ColorPicker label="Border" value={style.borderColor} onChange={(v) => onStyleChange("borderColor", v)} />
+                  <ColorPickerInput label="Border" value={style.borderColor} onChange={(v) => onStyleChange("borderColor", v)} />
                   <div style={{ flex: 1 }}></div>
                 </s-stack>
               </s-stack>
