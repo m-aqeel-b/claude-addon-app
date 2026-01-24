@@ -172,6 +172,8 @@ export function buildWidgetConfig(
           marginBottom: widgetStyle.marginBottom,
           imageSize: widgetStyle.imageSize,
           discountLabelStyle: widgetStyle.discountLabelStyle,
+          // Template design: DEFAULT, MINIMAL, or MODERN
+          template: widgetStyle.template || "DEFAULT",
           // Type assertions needed until Prisma client is regenerated
           showCountdownTimer: Boolean((widgetStyle as Record<string, unknown>).showCountdownTimer) || false,
           customCss: String((widgetStyle as Record<string, unknown>).customCss || ""),

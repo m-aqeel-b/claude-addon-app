@@ -4,6 +4,7 @@ import type {
   ImageSize,
   DiscountLabelStyle,
   BorderStyle,
+  WidgetTemplate,
 } from "@prisma/client";
 import prisma from "~/db.server";
 
@@ -31,6 +32,7 @@ export interface UpdateWidgetStyleInput {
   marginBottom?: number;
   imageSize?: ImageSize;
   discountLabelStyle?: DiscountLabelStyle;
+  template?: WidgetTemplate;
 }
 
 // ============================================================================
@@ -98,6 +100,7 @@ export async function resetWidgetStyle(bundleId: string): Promise<WidgetStyle> {
   return prisma.widgetStyle.update({
     where: { bundleId },
     data: {
+      template: "DEFAULT",
       backgroundColor: "#ffffff",
       fontColor: "#000000",
       buttonColor: "#000000",

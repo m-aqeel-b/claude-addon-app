@@ -32,8 +32,9 @@
 
 {% if config != blank and config != empty %}
 
+  {% assign template_class = widget_style.template | default: 'DEFAULT' | downcase %}
   <div
-    class="addon-bundle-widget"
+    class="addon-bundle-widget addon-bundle-widget--{{ template_class }}"
     data-bundle-id="{{ config.bundleId }}"
     data-product-id="{{ product.id }}"
     data-delete-addons-on-main-delete="{{ config.deleteAddonsOnMainDelete | default: false }}"
