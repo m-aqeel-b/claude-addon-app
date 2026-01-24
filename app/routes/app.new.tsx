@@ -1498,33 +1498,48 @@ function StylesModalPreview({ title, subtitle, selectionMode, addOns, style, end
     return null;
   };
 
+  // Template-specific styles
+  const isMinimal = style.template === "MINIMAL";
+  const isModern = style.template === "MODERN";
+
   const previewStyle: React.CSSProperties = {
-    backgroundColor: style.backgroundColor,
+    backgroundColor: isMinimal ? "transparent" : style.backgroundColor,
     color: style.fontColor,
     borderRadius: `${style.borderRadius}px`,
-    borderStyle: style.borderStyle === "NONE" ? "none" : style.borderStyle.toLowerCase(),
-    borderWidth: `${style.borderWidth}px`,
-    borderColor: style.borderColor,
+    borderStyle: isMinimal ? "solid" : (style.borderStyle === "NONE" ? "none" : style.borderStyle.toLowerCase()),
+    borderWidth: isMinimal ? "1px" : `${style.borderWidth}px`,
+    borderColor: isMinimal ? "rgba(0,0,0,0.1)" : style.borderColor,
     padding: `${style.padding}px`,
     fontSize: `${style.fontSize}px`,
     width: "100%",
     maxWidth: "100%",
     boxSizing: "border-box",
     overflow: "hidden",
+    ...(isModern && {
+      boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+      background: `linear-gradient(145deg, ${style.backgroundColor} 0%, ${style.backgroundColor}f5 100%)`,
+    }),
   };
 
   const titleStyle: React.CSSProperties = {
     fontSize: `${style.titleFontSize}px`,
-    fontWeight: 600,
+    fontWeight: isMinimal ? 500 : (isModern ? 700 : 600),
     marginBottom: "8px",
     lineHeight: 1.3,
+    ...(isModern && {
+      background: `linear-gradient(135deg, ${style.fontColor} 0%, ${style.fontColor}cc 100%)`,
+      WebkitBackgroundClip: "text",
+      WebkitTextFillColor: "transparent",
+      backgroundClip: "text",
+    }),
   };
 
   const subtitleStyle: React.CSSProperties = {
     fontSize: `${style.subtitleFontSize}px`,
-    opacity: 0.8,
+    opacity: isMinimal ? 0.6 : 0.8,
     marginBottom: "16px",
     lineHeight: 1.4,
+    ...(isMinimal && { fontWeight: 300 }),
   };
 
   const countdownContainerStyle: React.CSSProperties = {
@@ -1535,10 +1550,18 @@ function StylesModalPreview({ title, subtitle, selectionMode, addOns, style, end
     display: "inline-flex",
     alignItems: "center",
     gap: "8px",
-    background: `linear-gradient(135deg, ${style.discountBadgeColor} 0%, ${style.discountBadgeColor}cc 100%)`,
+    background: isMinimal
+      ? "transparent"
+      : `linear-gradient(135deg, ${style.discountBadgeColor} 0%, ${style.discountBadgeColor}cc 100%)`,
     padding: "12px 20px",
-    borderRadius: "8px",
+    borderRadius: isModern ? "12px" : "8px",
     opacity: isExpired ? 0.6 : 1,
+    ...(isMinimal && {
+      border: `1px solid ${style.discountBadgeColor}`,
+    }),
+    ...(isModern && {
+      boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
+    }),
   };
 
   const countdownItemStyle: React.CSSProperties = {
@@ -1550,16 +1573,16 @@ function StylesModalPreview({ title, subtitle, selectionMode, addOns, style, end
 
   const countdownValueStyle: React.CSSProperties = {
     fontSize: "1.5em",
-    fontWeight: 700,
-    color: style.discountTextColor,
+    fontWeight: isMinimal ? 500 : 700,
+    color: isMinimal ? style.discountBadgeColor : style.discountTextColor,
     lineHeight: 1,
     fontVariantNumeric: "tabular-nums",
   };
 
   const countdownLabelStyle: React.CSSProperties = {
     fontSize: "0.7em",
-    color: style.discountTextColor,
-    opacity: 0.9,
+    color: isMinimal ? style.discountBadgeColor : style.discountTextColor,
+    opacity: isMinimal ? 0.7 : 0.9,
     textTransform: "uppercase",
     letterSpacing: "0.5px",
     marginTop: "4px",
@@ -1567,9 +1590,9 @@ function StylesModalPreview({ title, subtitle, selectionMode, addOns, style, end
 
   const countdownSeparatorStyle: React.CSSProperties = {
     fontSize: "1.5em",
-    fontWeight: 700,
-    color: style.discountTextColor,
-    opacity: 0.7,
+    fontWeight: isMinimal ? 400 : 700,
+    color: isMinimal ? style.discountBadgeColor : style.discountTextColor,
+    opacity: isMinimal ? 0.5 : 0.7,
     lineHeight: 1,
     marginBottom: "16px",
   };
@@ -1577,20 +1600,30 @@ function StylesModalPreview({ title, subtitle, selectionMode, addOns, style, end
   const badgeStyle: React.CSSProperties = {
     display: "inline-flex",
     alignItems: "center",
-    padding: "3px 8px",
-    backgroundColor: style.discountBadgeColor,
-    color: style.discountTextColor,
+    padding: isMinimal ? "2px 6px" : "3px 8px",
+    backgroundColor: isMinimal ? "transparent" : style.discountBadgeColor,
+    color: isMinimal ? style.discountBadgeColor : style.discountTextColor,
     fontSize: "0.7em",
-    fontWeight: 700,
-    borderRadius: "4px",
+    fontWeight: isMinimal ? 500 : 700,
+    borderRadius: isModern ? "6px" : "4px",
     textTransform: "uppercase",
     letterSpacing: "0.5px",
     whiteSpace: "nowrap",
+    ...(isMinimal && {
+      border: `1px solid ${style.discountBadgeColor}`,
+    }),
+    ...(isModern && {
+      boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+    }),
   };
 
   const freeBadgeStyle: React.CSSProperties = {
     ...badgeStyle,
-    backgroundColor: "#27ae60",
+    backgroundColor: isMinimal ? "transparent" : "#27ae60",
+    color: isMinimal ? "#27ae60" : "#ffffff",
+    ...(isMinimal && {
+      border: "1px solid #27ae60",
+    }),
   };
 
   return (
@@ -1642,7 +1675,12 @@ function StylesModalPreview({ title, subtitle, selectionMode, addOns, style, end
           No add-ons configured
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: style.layoutType === "GRID" ? "row" : "column", gap: "12px", flexWrap: "wrap" }}>
+        <div style={{
+          display: "flex",
+          flexDirection: style.layoutType === "GRID" ? "row" : "column",
+          gap: isModern ? "16px" : "12px",
+          flexWrap: "wrap"
+        }}>
           {addOns.slice(0, 3).map((addOn) => {
             const firstVariant = addOn.selectedVariants?.[0];
             const originalPrice = firstVariant?.variantPrice ? Number(firstVariant.variantPrice) : null;
@@ -1652,19 +1690,51 @@ function StylesModalPreview({ title, subtitle, selectionMode, addOns, style, end
 
             const isFreeGift = addOn.discountType === "FREE_GIFT";
 
+            // Template-specific add-on item styles
+            const getAddonItemStyle = (): React.CSSProperties => {
+              const baseStyle: React.CSSProperties = {
+                display: "flex",
+                alignItems: "center",
+                gap: "12px",
+                padding: "12px",
+                borderRadius: `${Math.max(4, style.borderRadius / 2)}px`,
+                flex: style.layoutType === "GRID" ? "1 1 45%" : "none",
+              };
+
+              if (isMinimal) {
+                return {
+                  ...baseStyle,
+                  backgroundColor: "transparent",
+                  border: isFreeGift ? "1px solid rgba(39, 174, 96, 0.3)" : "1px solid rgba(0,0,0,0.08)",
+                  padding: "16px",
+                };
+              }
+
+              if (isModern) {
+                return {
+                  ...baseStyle,
+                  backgroundColor: isFreeGift ? "rgba(39, 174, 96, 0.06)" : style.backgroundColor,
+                  border: "none",
+                  boxShadow: isFreeGift
+                    ? "0 4px 16px rgba(39, 174, 96, 0.15), inset 0 0 0 1px rgba(39, 174, 96, 0.2)"
+                    : "0 4px 16px rgba(0,0,0,0.08)",
+                  padding: "16px",
+                  borderRadius: `${Math.max(8, style.borderRadius / 2)}px`,
+                };
+              }
+
+              // Default template
+              return {
+                ...baseStyle,
+                backgroundColor: isFreeGift ? "rgba(39, 174, 96, 0.08)" : "rgba(0,0,0,0.03)",
+                border: isFreeGift ? "1px dashed rgba(39, 174, 96, 0.4)" : "none",
+              };
+            };
+
             return (
               <div
                 key={addOn.id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "12px",
-                  padding: "12px",
-                  backgroundColor: isFreeGift ? "rgba(39, 174, 96, 0.08)" : "rgba(0,0,0,0.03)",
-                  border: isFreeGift ? "1px dashed rgba(39, 174, 96, 0.4)" : "none",
-                  borderRadius: `${Math.max(4, style.borderRadius / 2)}px`,
-                  flex: style.layoutType === "GRID" ? "1 1 45%" : "none",
-                }}
+                style={getAddonItemStyle()}
               >
                 {/* Checkbox or Free Gift Indicator */}
                 {isFreeGift ? (
@@ -1712,9 +1782,11 @@ function StylesModalPreview({ title, subtitle, selectionMode, addOns, style, end
                   flexShrink: 0,
                   width: `${imageSize}px`,
                   height: `${imageSize}px`,
-                  borderRadius: "6px",
+                  borderRadius: isModern ? "10px" : "6px",
                   overflow: "hidden",
-                  backgroundColor: "rgba(0,0,0,0.05)",
+                  backgroundColor: isMinimal ? "transparent" : "rgba(0,0,0,0.05)",
+                  ...(isMinimal && { border: "1px solid rgba(0,0,0,0.08)" }),
+                  ...(isModern && { boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }),
                 }}>
                   {addOn.productImageUrl ? (
                     <img
