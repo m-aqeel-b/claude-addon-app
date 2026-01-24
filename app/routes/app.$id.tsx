@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback, memo } from "react";
 import { useLoaderData, useFetcher, useNavigate, useParams, useSearchParams } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -1763,6 +1763,57 @@ interface StylesModalProps {
   addOnSets: AddOnSetWithVariants[];
 }
 
+// Stable ColorPickerInput component - defined outside to prevent re-creation on parent re-renders
+const ColorPickerInput = memo(function ColorPickerInput({
+  label,
+  value,
+  onChange
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const containerStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    marginTop: "4px",
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: "32px",
+    height: "32px",
+    padding: "0",
+    borderRadius: "6px",
+    border: "1px solid #8c9196",
+    backgroundColor: "#fff",
+    cursor: "pointer",
+    flexShrink: 0,
+  };
+
+  const codeStyle: React.CSSProperties = {
+    fontSize: "13px",
+    fontFamily: "monospace",
+    color: "#616161",
+    textTransform: "uppercase",
+  };
+
+  return (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <s-text variant="bodySm" color="subdued">{label}</s-text>
+      <div style={containerStyle}>
+        <input
+          type="color"
+          style={inputStyle}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <span style={codeStyle}>{value}</span>
+      </div>
+    </div>
+  );
+});
+
 function StylesModal({ style, onStyleChange, onClose, onSave, onReset, bundle, addOnSets }: StylesModalProps) {
   const resetButtonRef = useRef<HTMLElement>(null);
   const saveButtonRef = useRef<HTMLElement>(null);
@@ -1853,49 +1904,9 @@ function StylesModal({ style, onStyleChange, onClose, onSave, onReset, bundle, a
     backgroundColor: "#fff",
   };
 
-  const colorPickerContainerStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    marginTop: "4px",
-  };
-
-  const colorInputStyle: React.CSSProperties = {
-    width: "32px",
-    height: "32px",
-    padding: "0",
-    borderRadius: "6px",
-    border: "1px solid #8c9196",
-    backgroundColor: "#fff",
-    cursor: "pointer",
-    flexShrink: 0,
-  };
-
-  const colorCodeStyle: React.CSSProperties = {
-    fontSize: "13px",
-    fontFamily: "monospace",
-    color: "#616161",
-    textTransform: "uppercase",
-  };
-
-  const ColorPicker = ({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) => (
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <s-text variant="bodySm" color="subdued">{label}</s-text>
-      <div style={colorPickerContainerStyle}>
-        <input
-          type="color"
-          style={colorInputStyle}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-        />
-        <span style={colorCodeStyle}>{value}</span>
-      </div>
-    </div>
-  );
-
   return (
-    <div style={modalOverlayStyle} onClick={onClose}>
-      <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
+    <div style={modalOverlayStyle} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={modalContentStyle} onMouseDown={(e) => e.stopPropagation()}>
         <div style={modalHeaderStyle}>
           <s-text variant="headingMd">Widget Styles</s-text>
           <s-button variant="tertiary" onClick={onClose}>✕</s-button>
@@ -1922,19 +1933,19 @@ function StylesModal({ style, onStyleChange, onClose, onSave, onReset, bundle, a
               <s-stack direction="block" gap="tight">
                 <s-text variant="headingSm">Colors</s-text>
                 <s-stack direction="inline" gap="base">
-                  <ColorPicker label="Background" value={style.backgroundColor} onChange={(v) => onStyleChange("backgroundColor", v)} />
-                  <ColorPicker label="Font" value={style.fontColor} onChange={(v) => onStyleChange("fontColor", v)} />
+                  <ColorPickerInput label="Background" value={style.backgroundColor} onChange={(v) => onStyleChange("backgroundColor", v)} />
+                  <ColorPickerInput label="Font" value={style.fontColor} onChange={(v) => onStyleChange("fontColor", v)} />
                 </s-stack>
                 <s-stack direction="inline" gap="base">
-                  <ColorPicker label="Button" value={style.buttonColor} onChange={(v) => onStyleChange("buttonColor", v)} />
-                  <ColorPicker label="Button text" value={style.buttonTextColor} onChange={(v) => onStyleChange("buttonTextColor", v)} />
+                  <ColorPickerInput label="Button" value={style.buttonColor} onChange={(v) => onStyleChange("buttonColor", v)} />
+                  <ColorPickerInput label="Button text" value={style.buttonTextColor} onChange={(v) => onStyleChange("buttonTextColor", v)} />
                 </s-stack>
                 <s-stack direction="inline" gap="base">
-                  <ColorPicker label="Discount badge" value={style.discountBadgeColor} onChange={(v) => onStyleChange("discountBadgeColor", v)} />
-                  <ColorPicker label="Discount text" value={style.discountTextColor} onChange={(v) => onStyleChange("discountTextColor", v)} />
+                  <ColorPickerInput label="Discount badge" value={style.discountBadgeColor} onChange={(v) => onStyleChange("discountBadgeColor", v)} />
+                  <ColorPickerInput label="Discount text" value={style.discountTextColor} onChange={(v) => onStyleChange("discountTextColor", v)} />
                 </s-stack>
                 <s-stack direction="inline" gap="base">
-                  <ColorPicker label="Border" value={style.borderColor} onChange={(v) => onStyleChange("borderColor", v)} />
+                  <ColorPickerInput label="Border" value={style.borderColor} onChange={(v) => onStyleChange("borderColor", v)} />
                   <div style={{ flex: 1 }}></div>
                 </s-stack>
               </s-stack>
