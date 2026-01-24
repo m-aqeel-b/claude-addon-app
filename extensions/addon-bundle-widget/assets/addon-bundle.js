@@ -40,6 +40,131 @@
   }
 
   /**
+   * Auto-position the widget near the Add to Cart / Buy buttons
+   * This provides optimal placement for conversion without manual theme editing
+   */
+  function autoPositionWidget(widget) {
+    // Check if widget is already in optimal position (manually placed by merchant)
+    // We detect this by checking if the widget is inside or immediately after a product form
+    const productForm = widget.closest('form[action*="/cart/add"], .product-form, .product__form');
+    if (productForm) {
+      console.log('[AddonBundle] Widget already in product form - skipping auto-position');
+      return;
+    }
+
+    // Check if widget has a data attribute to disable auto-positioning
+    if (widget.dataset.disableAutoPosition === 'true') {
+      console.log('[AddonBundle] Auto-positioning disabled via data attribute');
+      return;
+    }
+
+    // Common selectors for buy button areas across popular Shopify themes
+    // Ordered by specificity - more specific selectors first
+    const buyButtonSelectors = [
+      // Button containers (best targets - includes all buttons)
+      '.product-form__buttons',           // Dawn, Refresh themes
+      '.product__submit-container',       // Various themes
+      '.product-form__submit-container',  // Various themes
+      '.product-form__payment-container', // Themes with payment buttons
+      '.buy-buttons',                     // Simple themes
+      '.product__buttons',                // Generic
+
+      // Dynamic checkout / Shop Pay buttons (place after these)
+      '.shopify-payment-button',          // Dynamic checkout buttons
+      '[data-shopify="payment-button"]',  // Payment button wrapper
+
+      // Individual buttons (fallback)
+      'button[name="add"]',               // Standard add to cart
+      'button[data-add-to-cart]',         // Data attribute based
+      '.product-form__submit',            // Dawn theme submit
+      '.product__submit',                 // Various themes
+      '.add-to-cart',                     // Generic class
+      '#AddToCart',                       // ID based
+
+      // Form level (last resort)
+      'form[action*="/cart/add"]',        // Product form
+      '.product-form',                    // Form wrapper
+      '.product__form',                   // Alternative form wrapper
+    ];
+
+    let targetElement = null;
+    let insertAfterTarget = true;
+
+    // Find the best target element
+    for (const selector of buyButtonSelectors) {
+      const element = document.querySelector(selector);
+      if (element) {
+        // Make sure we're on a product page and this is the main product form area
+        // Avoid targeting elements in quick-view modals or other widgets
+        const isInMainContent = element.closest('main, .main-content, #MainContent, .product, .product-template, [data-product]');
+        const isNotInModal = !element.closest('.modal, .drawer, .quick-view, .cart-drawer, [role="dialog"]');
+
+        if (isInMainContent || isNotInModal) {
+          targetElement = element;
+          console.log('[AddonBundle] Found target for positioning:', selector);
+          break;
+        }
+      }
+    }
+
+    if (!targetElement) {
+      console.log('[AddonBundle] No suitable position found - widget stays in original location');
+      return;
+    }
+
+    // Determine the best insertion point
+    // For containers, insert after the container
+    // For individual buttons, find the parent container if possible
+    let insertionPoint = targetElement;
+
+    // If we found a button, try to find its container
+    if (targetElement.tagName === 'BUTTON' || targetElement.tagName === 'INPUT') {
+      const buttonContainer = targetElement.closest('.product-form__buttons, .product__submit-container, .buy-buttons, .product__buttons');
+      if (buttonContainer) {
+        insertionPoint = buttonContainer;
+      }
+    }
+
+    // For shopify-payment-button, it might be a sibling to the add to cart
+    // So we want to insert after all payment-related buttons
+    if (targetElement.classList.contains('shopify-payment-button') ||
+        targetElement.hasAttribute('data-shopify')) {
+      const parent = targetElement.parentElement;
+      if (parent) {
+        // Find the last payment/submit related element in the parent
+        const siblings = parent.children;
+        for (let i = siblings.length - 1; i >= 0; i--) {
+          const sibling = siblings[i];
+          if (sibling.classList.contains('shopify-payment-button') ||
+              sibling.hasAttribute('data-shopify') ||
+              sibling.querySelector('button[name="add"], .product-form__submit')) {
+            insertionPoint = sibling;
+            break;
+          }
+        }
+      }
+    }
+
+    // Check if widget is already positioned correctly
+    const nextSibling = insertionPoint.nextElementSibling;
+    if (nextSibling === widget) {
+      console.log('[AddonBundle] Widget already in optimal position');
+      return;
+    }
+
+    // Move the widget
+    console.log('[AddonBundle] Auto-positioning widget after:', insertionPoint.tagName, insertionPoint.className);
+
+    // Add a small margin for visual separation
+    widget.style.marginTop = widget.style.marginTop || 'var(--addon-margin-top, 16px)';
+
+    // Insert after the target
+    insertionPoint.parentNode.insertBefore(widget, insertionPoint.nextSibling);
+
+    console.log('[AddonBundle] Widget repositioned successfully');
+  }
+
+  /**
    * Initialize the widget
    */
   function init() {
@@ -47,6 +172,9 @@
 
     const widget = document.querySelector('.addon-bundle-widget');
     if (!widget) return;
+
+    // Auto-position widget near buy buttons for optimal UX
+    autoPositionWidget(widget);
 
     state.bundleId = widget.dataset.bundleId;
     state.productId = widget.dataset.productId;
