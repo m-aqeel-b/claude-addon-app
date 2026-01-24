@@ -141,6 +141,10 @@ model Bundle {
   // Cart behavior
   deleteAddOnsWithMain Boolean @default(false) // Delete add-on products when main product is removed from cart
 
+  // Sold-out handling
+  showSoldOutLabel  Boolean @default(false) // Show sold-out label for out-of-stock variants
+  soldOutLabelText  String  @default("Sold out") // Custom label text for sold-out items
+
   // Shopify discount reference (GID from discountAutomaticAppCreate)
   shopifyDiscountId String?
 

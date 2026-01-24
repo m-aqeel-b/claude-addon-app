@@ -7,6 +7,8 @@
   - selection_mode: 'SINGLE' or 'MULTIPLE'
   - image_size: 'small', 'medium', or 'large'
   - show_quantity: boolean
+  - show_sold_out_label: boolean (from bundle config)
+  - sold_out_label_text: string (from bundle config)
 {% endcomment %}
 
 {% liquid
@@ -113,10 +115,82 @@
   if addon.imageUrl != blank and addon.imageUrl != nil
     assign has_image = true
   endif
+
+  comment
+    ============================================================================
+    SOLD-OUT HANDLING
+    Get real-time inventory data from Shopify to determine sold-out state
+    Only applies when show_sold_out_label is enabled
+    ============================================================================
+  endcomment
+  assign is_sold_out = false
+  assign all_variants_sold_out = false
+  assign has_multiple_variants = false
+  assign available_variant_count = 0
+  assign total_variant_count = 0
+  assign sold_out_variant_ids = ''
+  assign sold_out_label = sold_out_label_text | default: 'Sold out'
+
+  if show_sold_out_label == true and addon.productHandle != blank
+    comment
+      Fetch the actual product from Shopify to check inventory
+    endcomment
+    assign addon_product = all_products[addon.productHandle]
+
+    if addon_product != blank
+      comment
+        Count total variants and available variants
+      endcomment
+      assign total_variant_count = addon_product.variants.size
+      assign has_multiple_variants = false
+      if total_variant_count > 1
+        assign has_multiple_variants = true
+      endif
+
+      comment
+        Check each variant's availability
+        A variant is available when inventory is tracked AND quantity > 0
+        OR when inventory is not tracked (always available)
+      endcomment
+      for pv in addon_product.variants
+        if pv.available == true
+          assign available_variant_count = available_variant_count | plus: 1
+        else
+          comment
+            Build comma-separated list of sold-out variant IDs
+          endcomment
+          if sold_out_variant_ids == ''
+            assign sold_out_variant_ids = pv.id
+          else
+            assign sold_out_variant_ids = sold_out_variant_ids | append: ',' | append: pv.id
+          endif
+        endif
+      endfor
+
+      comment
+        Determine sold-out state:
+        - Single variant: sold out if that variant is unavailable
+        - Multiple variants: all sold out if no variants are available
+      endcomment
+      if available_variant_count == 0
+        assign all_variants_sold_out = true
+        assign is_sold_out = true
+      elsif total_variant_count == 1 and available_variant_count == 0
+        assign is_sold_out = true
+      endif
+    endif
+  endif
 %}
 
-<div class="addon-item{% if is_free_gift %} addon-item--free-gift{% endif %}" data-addon-id="{{ addon.addOnId }}" data-variant-id="{{ variant_id }}" data-product-handle="{{ addon.productHandle }}" data-original-price="{{ original_price }}" data-discounted-price="{{ discounted_price }}" data-is-free-gift="{{ is_free_gift }}">
-  <label class="addon-item__label">
+<div class="addon-item{% if is_free_gift %} addon-item--free-gift{% endif %}{% if is_sold_out %} addon-item--sold-out{% endif %}{% if all_variants_sold_out %} addon-item--all-sold-out{% endif %}" data-addon-id="{{ addon.addOnId }}" data-variant-id="{{ variant_id }}" data-product-handle="{{ addon.productHandle }}" data-original-price="{{ original_price }}" data-discounted-price="{{ discounted_price }}" data-is-free-gift="{{ is_free_gift }}" data-sold-out="{{ is_sold_out }}" data-all-variants-sold-out="{{ all_variants_sold_out }}" data-sold-out-variant-ids="{{ sold_out_variant_ids }}" data-has-multiple-variants="{{ has_multiple_variants }}">
+  {% comment %} Sold-out overlay for completely sold-out items {% endcomment %}
+  {% if is_sold_out and all_variants_sold_out %}
+    <div class="addon-item__sold-out-overlay">
+      <span class="addon-item__sold-out-label">{{ sold_out_label }}</span>
+    </div>
+  {% endif %}
+
+  <label class="addon-item__label"{% if is_sold_out and all_variants_sold_out %} aria-disabled="true"{% endif %}>
     {% if is_free_gift %}
       {% comment %} Free gift - show included indicator instead of checkbox {% endcomment %}
       <input
@@ -144,9 +218,9 @@
         data-price="{{ original_price }}"
         data-discount-type="{{ addon.discountType }}"
         data-discount-value="{{ addon.discountValue }}"
-        {{ checked_attr }}
+        {% if is_sold_out and all_variants_sold_out %}disabled{% else %}{{ checked_attr }}{% endif %}
       >
-      <span class="addon-item__checkbox-custom"></span>
+      <span class="addon-item__checkbox-custom{% if is_sold_out and all_variants_sold_out %} addon-item__checkbox-custom--disabled{% endif %}"></span>
     {% endif %}
 
     {% comment %} Product Image - always show, with placeholder if no image {% endcomment %}
@@ -219,10 +293,26 @@
 
       {% comment %} Variant Selector for multiple variants {% endcomment %}
       {% if addon.selectedVariants.size > 1 %}
-        <select class="addon-item__variant-select" data-addon-id="{{ addon.addOnId }}">
+        <select class="addon-item__variant-select{% if show_sold_out_label and sold_out_variant_ids != '' %} addon-item__variant-select--has-sold-out{% endif %}" data-addon-id="{{ addon.addOnId }}" data-sold-out-ids="{{ sold_out_variant_ids }}">
           {% for variant in addon.selectedVariants %}
-            <option value="{{ variant.shopifyVariantId }}" data-price="{{ variant.variantPrice }}">
-              {{ variant.variantTitle }}{% if variant.variantPrice != blank %} - {{ variant.variantPrice | times: 100 | money }}{% endif %}
+            {% comment %} Check if this specific variant is sold out {% endcomment %}
+            {% assign variant_numeric_id = variant.shopifyVariantId | split: '/' | last %}
+            {% assign variant_is_sold_out = false %}
+            {% if show_sold_out_label and sold_out_variant_ids != '' %}
+              {% assign sold_out_ids_array = sold_out_variant_ids | split: ',' %}
+              {% for sold_id in sold_out_ids_array %}
+                {% if sold_id == variant_numeric_id %}
+                  {% assign variant_is_sold_out = true %}
+                  {% break %}
+                {% endif %}
+              {% endfor %}
+            {% endif %}
+            <option
+              value="{{ variant.shopifyVariantId }}"
+              data-price="{{ variant.variantPrice }}"
+              {% if variant_is_sold_out %}data-sold-out="true" disabled{% endif %}
+            >
+              {{ variant.variantTitle }}{% if variant.variantPrice != blank %} - {{ variant.variantPrice | times: 100 | money }}{% endif %}{% if variant_is_sold_out %} ({{ sold_out_label }}){% endif %}
             </option>
           {% endfor %}
         </select>

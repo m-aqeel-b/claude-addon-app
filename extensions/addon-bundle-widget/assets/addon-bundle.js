@@ -12,6 +12,8 @@
     bundleId: null,
     productId: null,
     deleteAddonsOnMainDelete: false, // Per-bundle setting for Cart Transform
+    showSoldOutLabel: false, // Show sold-out label for out-of-stock variants
+    soldOutLabelText: 'Sold out', // Custom label text for sold-out items
     initialized: false,
     isInternalRequest: false, // Flag to prevent double-interception
   };
@@ -49,11 +51,15 @@
     state.bundleId = widget.dataset.bundleId;
     state.productId = widget.dataset.productId;
     state.deleteAddonsOnMainDelete = widget.dataset.deleteAddonsOnMainDelete === 'true';
+    state.showSoldOutLabel = widget.dataset.showSoldOutLabel === 'true';
+    state.soldOutLabelText = widget.dataset.soldOutLabelText || 'Sold out';
     state.initialized = true;
 
     console.log('[AddonBundle] Widget initialized', {
       bundleId: state.bundleId,
-      deleteAddonsOnMainDelete: state.deleteAddonsOnMainDelete
+      deleteAddonsOnMainDelete: state.deleteAddonsOnMainDelete,
+      showSoldOutLabel: state.showSoldOutLabel,
+      soldOutLabelText: state.soldOutLabelText
     });
 
     // Setup all listeners
@@ -143,15 +149,24 @@
 
   /**
    * Update addon item prices with market-specific data
+   * Also updates sold-out states based on inventory availability
    */
   function updateAddonPrices(addonItems, productData) {
     if (!productData || !productData.variants) return;
 
     // Create a map of variant ID to variant data for quick lookup
     const variantMap = new Map();
+    let availableVariantCount = 0;
+    let totalVariantCount = productData.variants.length;
+
     productData.variants.forEach(variant => {
       variantMap.set(String(variant.id), variant);
+      if (variant.available) {
+        availableVariantCount++;
+      }
     });
+
+    const allVariantsSoldOut = availableVariantCount === 0;
 
     addonItems.forEach(item => {
       const variantId = extractNumericId(item.dataset.variantId);
@@ -222,6 +237,11 @@
         }
       }
 
+      // Update sold-out state dynamically based on real-time inventory
+      if (state.showSoldOutLabel) {
+        updateSoldOutState(item, variant, variantMap, allVariantsSoldOut);
+      }
+
       // Also update variant select dropdown if present
       const variantSelect = item.querySelector('.addon-item__variant-select');
       if (variantSelect) {
@@ -231,13 +251,103 @@
           if (optionVariant) {
             const optionPrice = optionVariant.price / 100;
             option.dataset.price = optionPrice;
-            // Update option text to show new price
+            // Update option text to show new price and sold-out status
             const variantTitle = optionVariant.title || optionVariant.option1;
-            option.textContent = `${variantTitle} - ${formatMoney(optionVariant.price)}`;
+            const soldOutSuffix = (!optionVariant.available && state.showSoldOutLabel) ? ` (${state.soldOutLabelText})` : '';
+            option.textContent = `${variantTitle} - ${formatMoney(optionVariant.price)}${soldOutSuffix}`;
+
+            // Update sold-out attribute and disabled state
+            if (!optionVariant.available && state.showSoldOutLabel) {
+              option.dataset.soldOut = 'true';
+              option.disabled = true;
+            } else {
+              option.dataset.soldOut = 'false';
+              option.disabled = false;
+            }
           }
         });
+
+        // If currently selected option is sold out, try to select an available one
+        if (variantSelect.selectedOptions[0]?.dataset.soldOut === 'true') {
+          const availableOption = Array.from(variantSelect.options).find(
+            opt => opt.dataset.soldOut !== 'true' && !opt.disabled
+          );
+          if (availableOption) {
+            variantSelect.value = availableOption.value;
+            variantSelect.dispatchEvent(new Event('change'));
+          }
+        }
       }
     });
+  }
+
+  /**
+   * Update sold-out state for a single addon item
+   */
+  function updateSoldOutState(item, variant, variantMap, allVariantsSoldOut) {
+    const input = item.querySelector('.addon-item__input');
+    const checkbox = item.querySelector('.addon-item__checkbox-custom');
+    const hasMultipleVariants = item.dataset.hasMultipleVariants === 'true';
+
+    // Determine if this item should show as sold out
+    const isSoldOut = allVariantsSoldOut || (!hasMultipleVariants && !variant.available);
+
+    if (isSoldOut) {
+      // Add sold-out classes
+      item.classList.add('addon-item--sold-out');
+      if (allVariantsSoldOut) {
+        item.classList.add('addon-item--all-sold-out');
+      }
+
+      // Disable input
+      if (input) {
+        input.disabled = true;
+        input.checked = false;
+      }
+      if (checkbox) {
+        checkbox.classList.add('addon-item__checkbox-custom--disabled');
+      }
+
+      // Add overlay if not already present
+      if (!item.querySelector('.addon-item__sold-out-overlay')) {
+        const overlay = document.createElement('div');
+        overlay.className = 'addon-item__sold-out-overlay';
+        overlay.innerHTML = `<span class="addon-item__sold-out-label">${state.soldOutLabelText}</span>`;
+        item.insertBefore(overlay, item.firstChild);
+      }
+
+      // Update data attributes
+      item.dataset.soldOut = 'true';
+      item.dataset.allVariantsSoldOut = String(allVariantsSoldOut);
+
+      // Remove from selections if was selected
+      const addonId = item.dataset.addonId;
+      if (state.selectedAddOns.has(addonId)) {
+        state.selectedAddOns.delete(addonId);
+        item.classList.remove('addon-item--selected');
+        console.log('[AddonBundle] Removed sold-out item from selections:', addonId);
+      }
+    } else {
+      // Remove sold-out state if item is now available
+      item.classList.remove('addon-item--sold-out', 'addon-item--all-sold-out');
+
+      if (input) {
+        input.disabled = false;
+      }
+      if (checkbox) {
+        checkbox.classList.remove('addon-item__checkbox-custom--disabled');
+      }
+
+      // Remove overlay
+      const overlay = item.querySelector('.addon-item__sold-out-overlay');
+      if (overlay) {
+        overlay.remove();
+      }
+
+      // Update data attributes
+      item.dataset.soldOut = 'false';
+      item.dataset.allVariantsSoldOut = 'false';
+    }
   }
 
   /**
@@ -319,7 +429,13 @@
    */
   function initializeSelections() {
     // Auto-select all FREE_GIFT items (they are always included)
+    // But skip sold-out FREE_GIFT items
     document.querySelectorAll('.addon-item--free-gift').forEach(addonItem => {
+      // Skip sold-out free gifts
+      if (addonItem.dataset.soldOut === 'true' || addonItem.dataset.allVariantsSoldOut === 'true') {
+        console.log('[AddonBundle] Skipping sold-out FREE_GIFT:', addonItem.dataset.addonId);
+        return;
+      }
       updateSelectionState(addonItem, true);
       addonItem.classList.add('addon-item--selected');
       console.log('[AddonBundle] Auto-selected FREE_GIFT:', addonItem.dataset.addonId);
@@ -328,8 +444,14 @@
     // Initialize regular pre-checked items
     document.querySelectorAll('.addon-item__input:checked').forEach(input => {
       const addonItem = input.closest('.addon-item');
-      // Skip if it's a free gift (already handled above)
+      // Skip if it's a free gift (already handled above) or sold out
       if (addonItem && !addonItem.classList.contains('addon-item--free-gift')) {
+        // Skip sold-out items
+        if (addonItem.dataset.soldOut === 'true' || addonItem.dataset.allVariantsSoldOut === 'true') {
+          input.checked = false;
+          console.log('[AddonBundle] Unchecking sold-out pre-selected item:', addonItem.dataset.addonId);
+          return;
+        }
         updateSelectionState(addonItem, true);
       }
     });
@@ -344,6 +466,14 @@
     document.querySelectorAll('.addon-item__input').forEach(input => {
       input.addEventListener('change', (e) => {
         const addonItem = e.target.closest('.addon-item');
+
+        // Prevent selection of sold-out items
+        if (addonItem?.dataset.soldOut === 'true' || addonItem?.dataset.allVariantsSoldOut === 'true') {
+          e.target.checked = false;
+          console.log('[AddonBundle] Prevented selection of sold-out item');
+          return;
+        }
+
         const isSelected = e.target.checked;
 
         // For radio buttons, clear other selections first
@@ -444,15 +574,31 @@
     document.querySelectorAll('.addon-item__variant-select').forEach(select => {
       select.addEventListener('change', (e) => {
         const addonId = e.target.dataset.addonId;
+        const addonItem = e.target.closest('.addon-item');
+        const selectedOption = e.target.options[e.target.selectedIndex];
+
+        // Check if selected variant is sold out
+        if (selectedOption?.dataset.soldOut === 'true' && state.showSoldOutLabel) {
+          // Try to select an available variant instead
+          const availableOption = Array.from(e.target.options).find(
+            opt => opt.dataset.soldOut !== 'true' && !opt.disabled
+          );
+          if (availableOption) {
+            e.target.value = availableOption.value;
+            console.log('[AddonBundle] Auto-selected available variant instead of sold-out');
+          } else {
+            console.log('[AddonBundle] No available variants found');
+          }
+          return;
+        }
+
         const selection = state.selectedAddOns.get(addonId);
         if (selection) {
           selection.variantId = extractNumericId(e.target.value);
         }
 
         // Update price display when variant changes
-        const addonItem = e.target.closest('.addon-item');
-        const selectedOption = e.target.options[e.target.selectedIndex];
-        const newPrice = selectedOption.dataset.price;
+        const newPrice = selectedOption?.dataset.price;
 
         if (addonItem && newPrice) {
           updatePriceDisplay(addonItem, parseFloat(newPrice));

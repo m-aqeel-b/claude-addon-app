@@ -282,6 +282,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const combineWithOrderDiscounts = formData.get("combineWithOrderDiscounts") as DiscountCombination;
     const combineWithShippingDiscounts = formData.get("combineWithShippingDiscounts") as DiscountCombination;
     const deleteAddOnsWithMain = formData.get("deleteAddOnsWithMain") === "true";
+    const showSoldOutLabel = formData.get("showSoldOutLabel") === "true";
+    const soldOutLabelText = formData.get("soldOutLabelText") as string;
 
     const errors: Record<string, string> = {};
 
@@ -313,6 +315,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       combineWithOrderDiscounts,
       combineWithShippingDiscounts,
       deleteAddOnsWithMain,
+      showSoldOutLabel,
+      soldOutLabelText: soldOutLabelText || "Sold out",
     });
 
     // Sync metafields after bundle update
@@ -359,6 +363,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const combineWithOrderDiscounts = formData.get("combineWithOrderDiscounts") as DiscountCombination;
     const combineWithShippingDiscounts = formData.get("combineWithShippingDiscounts") as DiscountCombination;
     const deleteAddOnsWithMain = formData.get("deleteAddOnsWithMain") === "true";
+    const showSoldOutLabel = formData.get("showSoldOutLabel") === "true";
+    const soldOutLabelText = formData.get("soldOutLabelText") as string;
 
     // Parse JSON data for batched changes
     const newTargetedItems = JSON.parse(formData.get("newTargetedItems") as string || "[]");
@@ -399,6 +405,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       combineWithOrderDiscounts,
       combineWithShippingDiscounts,
       deleteAddOnsWithMain,
+      showSoldOutLabel,
+      soldOutLabelText: soldOutLabelText || "Sold out",
     });
 
     // 2. Process deleted targeted items
@@ -966,6 +974,9 @@ export default function EditBundle() {
   const stylesButtonRef = useRef<HTMLElement>(null);
   const toggleStatusButtonRef = useRef<HTMLElement>(null);
 
+  // Type assertion for bundle properties
+  const bundleExt = bundle as Record<string, unknown>;
+
   const [form, setForm] = useState({
     title: bundle.title,
     subtitle: bundle.subtitle || "",
@@ -977,7 +988,9 @@ export default function EditBundle() {
     combineWithProductDiscounts: bundle.combineWithProductDiscounts,
     combineWithOrderDiscounts: bundle.combineWithOrderDiscounts,
     combineWithShippingDiscounts: bundle.combineWithShippingDiscounts,
-    deleteAddOnsWithMain: (bundle as Record<string, unknown>).deleteAddOnsWithMain as boolean || false,
+    deleteAddOnsWithMain: bundleExt.deleteAddOnsWithMain as boolean || false,
+    showSoldOutLabel: bundleExt.showSoldOutLabel as boolean || false,
+    soldOutLabelText: (bundleExt.soldOutLabelText as string) || "Sold out",
   });
 
   // Type assertion for widgetStyle properties not yet in Prisma client
@@ -1101,8 +1114,9 @@ export default function EditBundle() {
       {
         intent: "saveAllChanges",
         ...form,
-        // Convert boolean to string for form submission
+        // Convert booleans to string for form submission
         deleteAddOnsWithMain: form.deleteAddOnsWithMain ? "true" : "false",
+        showSoldOutLabel: form.showSoldOutLabel ? "true" : "false",
         // Targeted items changes
         newTargetedItems: JSON.stringify(newTargetedItems),
         deletedTargetedItemIds: JSON.stringify(deletedTargetedItemIds),
@@ -1670,15 +1684,37 @@ export default function EditBundle() {
 
       {/* Status Section - Aside */}
       <s-section slot="aside" heading="Status">
-        <s-select
-          label="Bundle status"
-          value={form.status}
-          onInput={(e: Event) => handleFormChange("status", (e.target as HTMLSelectElement).value)}
-        >
-          <s-option value="DRAFT" selected={form.status === "DRAFT"}>Draft</s-option>
-          <s-option value="ACTIVE" selected={form.status === "ACTIVE"}>Active</s-option>
-          <s-option value="ARCHIVED" selected={form.status === "ARCHIVED"}>Archived</s-option>
-        </s-select>
+        <s-stack direction="block" gap="base">
+          <s-select
+            label="Bundle status"
+            value={form.status}
+            onInput={(e: Event) => handleFormChange("status", (e.target as HTMLSelectElement).value)}
+          >
+            <s-option value="DRAFT" selected={form.status === "DRAFT"}>Draft</s-option>
+            <s-option value="ACTIVE" selected={form.status === "ACTIVE"}>Active</s-option>
+            <s-option value="ARCHIVED" selected={form.status === "ARCHIVED"}>Archived</s-option>
+          </s-select>
+
+          <div style={{ borderTop: "1px solid #e0e0e0", margin: "12px 0" }} />
+
+          <s-checkbox
+            label="Show as Sold Out"
+            checked={form.showSoldOutLabel}
+            onChange={(e: Event) => handleFormChange("showSoldOutLabel", (e.target as HTMLInputElement).checked)}
+          />
+          <s-text variant="bodySm" color="subdued">
+            When enabled, out-of-stock add-on variants will be visually disabled with a label.
+          </s-text>
+
+          {form.showSoldOutLabel && (
+            <s-text-field
+              label="Label Title"
+              value={form.soldOutLabelText}
+              onInput={(e: Event) => handleFormChange("soldOutLabelText", (e.target as HTMLInputElement).value)}
+              placeholder="Sold out"
+            />
+          )}
+        </s-stack>
       </s-section>
 
       {/* Customer Selection Section - Aside */}

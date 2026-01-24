@@ -5,6 +5,9 @@
   Parameters:
   - groups: Array of product groups
   - selection_mode: 'SINGLE' or 'MULTIPLE'
+  - image_size: Image size for add-on items
+  - show_sold_out_label: boolean (from bundle config)
+  - sold_out_label_text: string (from bundle config)
 {% endcomment %}
 
 <div class="addon-tabs" role="tablist">
@@ -37,8 +40,10 @@
             {% render 'addon-item',
               addon: addon,
               selection_mode: selection_mode,
-              image_size: 'medium',
-              show_quantity: addon.showQuantitySelector
+              image_size: image_size,
+              show_quantity: addon.showQuantitySelector,
+              show_sold_out_label: show_sold_out_label,
+              sold_out_label_text: sold_out_label_text
             %}
           {% endfor %}
         </div>

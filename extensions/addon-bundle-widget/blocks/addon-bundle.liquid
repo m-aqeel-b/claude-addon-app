@@ -38,6 +38,8 @@
     data-bundle-id="{{ config.bundleId }}"
     data-product-id="{{ product.id }}"
     data-delete-addons-on-main-delete="{{ config.deleteAddonsOnMainDelete | default: false }}"
+    data-show-sold-out-label="{{ config.showSoldOutLabel | default: false }}"
+    data-sold-out-label-text="{{ config.soldOutLabelText | default: 'Sold out' }}"
     {% if show_countdown %}
       data-end-date="{{ config.endDate }}"
     {% endif %}
@@ -99,7 +101,7 @@
 
     {% comment %} Product Groups with Tabs {% endcomment %}
     {% if config.productGroups != blank and config.productGroups.size > 1 %}
-      {% render 'addon-tabs', groups: config.productGroups, selection_mode: config.selectionMode, image_size: widget_style.imageSize %}
+      {% render 'addon-tabs', groups: config.productGroups, selection_mode: config.selectionMode, image_size: widget_style.imageSize, show_sold_out_label: config.showSoldOutLabel, sold_out_label_text: config.soldOutLabelText %}
     {% else %}
       {% comment %} Regular Add-On List {% endcomment %}
       <div class="addon-bundle-widget__list addon-bundle-widget__list--{{ widget_style.layoutType | default: 'LIST' | downcase }}">
@@ -108,7 +110,9 @@
             addon: addon,
             selection_mode: config.selectionMode,
             image_size: widget_style.imageSize,
-            show_quantity: addon.showQuantitySelector
+            show_quantity: addon.showQuantitySelector,
+            show_sold_out_label: config.showSoldOutLabel,
+            sold_out_label_text: config.soldOutLabelText
           %}
         {% endfor %}
       </div>

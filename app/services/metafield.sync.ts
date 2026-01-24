@@ -51,6 +51,8 @@ interface WidgetConfig {
   startDate: string | null;
   endDate: string | null;
   deleteAddonsOnMainDelete: boolean; // Cart Transform: remove addons when main product deleted
+  showSoldOutLabel: boolean; // Show sold-out label for out-of-stock variants
+  soldOutLabelText: string; // Custom label text for sold-out items
   addOns: Array<{
     addOnId: string;
     shopifyProductId: string;
@@ -131,6 +133,9 @@ export function buildWidgetConfig(
     endDate: bundle.endDate ? bundle.endDate.toISOString() : null,
     // Cart Transform: controls whether addons are removed when main product is deleted
     deleteAddonsOnMainDelete: Boolean(bundleExt.deleteAddOnsWithMain) || false,
+    // Sold-out handling
+    showSoldOutLabel: Boolean(bundleExt.showSoldOutLabel) || false,
+    soldOutLabelText: (bundleExt.soldOutLabelText as string) || "Sold out",
     addOns: addOnSets.map((addOn) => ({
       addOnId: addOn.id,
       shopifyProductId: addOn.shopifyProductId,
