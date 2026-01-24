@@ -53,6 +53,14 @@ interface SSelectProps extends BaseProps {
   label?: string;
   value?: string;
   onChange?: (e: Event) => void;
+  onInput?: (e: Event) => void;
+  children?: ReactNode;
+}
+
+interface SOptionProps extends BaseProps {
+  value?: string;
+  selected?: boolean;
+  defaultSelected?: boolean;
   children?: ReactNode;
 }
 
@@ -70,6 +78,7 @@ interface SRadioProps extends BaseProps {
 }
 
 interface SCheckboxProps extends BaseProps {
+  label?: string;
   checked?: boolean;
   disabled?: boolean;
   onChange?: (e: Event) => void;
@@ -129,6 +138,7 @@ declare global {
       's-stack': SStackProps;
       's-text-field': STextFieldProps;
       's-select': SSelectProps;
+      's-option': SOptionProps;
       's-radio-group': SRadioGroupProps;
       's-radio': SRadioProps;
       's-checkbox': SCheckboxProps;

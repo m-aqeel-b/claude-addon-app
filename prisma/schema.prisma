@@ -92,6 +92,13 @@ enum BorderStyle {
   DOTTED
 }
 
+/// Widget template style
+enum WidgetTemplate {
+  DEFAULT    // Default template
+  MINIMAL    // Clean, minimal design
+  MODERN     // Modern card-based design
+}
+
 /// Discount combination behavior
 enum DiscountCombination {
   COMBINE     // Can combine with other discounts
@@ -130,6 +137,13 @@ model Bundle {
   combineWithProductDiscounts  DiscountCombination @default(COMBINE)
   combineWithOrderDiscounts    DiscountCombination @default(COMBINE)
   combineWithShippingDiscounts DiscountCombination @default(COMBINE)
+
+  // Cart behavior
+  deleteAddOnsWithMain Boolean @default(false) // Delete add-on products when main product is removed from cart
+
+  // Sold-out handling
+  showSoldOutLabel  Boolean @default(false) // Show sold-out label for out-of-stock variants
+  soldOutLabelText  String  @default("Sold out") // Custom label text for sold-out items
 
   // Shopify discount reference (GID from discountAutomaticAppCreate)
   shopifyDiscountId String?
@@ -295,6 +309,9 @@ model WidgetStyle {
   bundleId String @unique
   bundle   Bundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
 
+  // Template
+  template WidgetTemplate @default(DEFAULT)
+
   // Colors (stored as hex strings, e.g., "#ffffff")
   backgroundColor    String @default("#ffffff")
   fontColor          String @default("#000000")
@@ -323,6 +340,13 @@ model WidgetStyle {
 
   // Discount label style
   discountLabelStyle DiscountLabelStyle @default(BADGE)
+
+  // Countdown timer
+  showCountdownTimer Boolean @default(false)
+
+  // Custom CSS and JS
+  customCss String @default("")
+  customJs  String @default("")
 
   @@index([bundleId])
 }

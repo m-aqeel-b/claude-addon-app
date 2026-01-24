@@ -29,7 +29,16 @@
       "Bash(npx shopify app deploy:*)",
       "Bash(npm run typecheck:*)",
       "Bash(npm run deploy)",
-      "Bash(npm run deploy:*)"
+      "Bash(npm run deploy:*)",
+      "Bash(npm run build:*)",
+      "mcp__shopify-dev-mcp__validate_theme",
+      "Bash(npx prisma:*)",
+      "Bash(npm run typegen:*)",
+      "Bash(git clean:*)",
+      "Bash(ls:*)",
+      "Bash(shopify app dev:*)",
+      "Bash(timeout:*)",
+      "Bash(cmd /c \"taskkill /PID 3056 /F\")"
     ]
   },
   "enableAllProjectMcpServers": true,

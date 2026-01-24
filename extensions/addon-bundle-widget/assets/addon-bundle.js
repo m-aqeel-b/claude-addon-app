@@ -11,9 +11,20 @@
     selectedAddOns: new Map(),
     bundleId: null,
     productId: null,
+    deleteAddonsOnMainDelete: false, // Per-bundle setting for Cart Transform
+    showSoldOutLabel: false, // Show sold-out label for out-of-stock variants
+    soldOutLabelText: 'Sold out', // Custom label text for sold-out items
     initialized: false,
     isInternalRequest: false, // Flag to prevent double-interception
   };
+
+  /**
+   * Generate a unique bundle group ID for this add-to-cart action
+   * This links the main product and its addons together in the cart
+   */
+  function generateBundleGroupId() {
+    return 'bg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+  }
 
   /**
    * Extract numeric ID from Shopify GID
@@ -29,6 +40,131 @@
   }
 
   /**
+   * Auto-position the widget near the Add to Cart / Buy buttons
+   * This provides optimal placement for conversion without manual theme editing
+   */
+  function autoPositionWidget(widget) {
+    // Check if widget is already in optimal position (manually placed by merchant)
+    // We detect this by checking if the widget is inside or immediately after a product form
+    const productForm = widget.closest('form[action*="/cart/add"], .product-form, .product__form');
+    if (productForm) {
+      console.log('[AddonBundle] Widget already in product form - skipping auto-position');
+      return;
+    }
+
+    // Check if widget has a data attribute to disable auto-positioning
+    if (widget.dataset.disableAutoPosition === 'true') {
+      console.log('[AddonBundle] Auto-positioning disabled via data attribute');
+      return;
+    }
+
+    // Common selectors for buy button areas across popular Shopify themes
+    // Ordered by specificity - more specific selectors first
+    const buyButtonSelectors = [
+      // Button containers (best targets - includes all buttons)
+      '.product-form__buttons',           // Dawn, Refresh themes
+      '.product__submit-container',       // Various themes
+      '.product-form__submit-container',  // Various themes
+      '.product-form__payment-container', // Themes with payment buttons
+      '.buy-buttons',                     // Simple themes
+      '.product__buttons',                // Generic
+
+      // Dynamic checkout / Shop Pay buttons (place after these)
+      '.shopify-payment-button',          // Dynamic checkout buttons
+      '[data-shopify="payment-button"]',  // Payment button wrapper
+
+      // Individual buttons (fallback)
+      'button[name="add"]',               // Standard add to cart
+      'button[data-add-to-cart]',         // Data attribute based
+      '.product-form__submit',            // Dawn theme submit
+      '.product__submit',                 // Various themes
+      '.add-to-cart',                     // Generic class
+      '#AddToCart',                       // ID based
+
+      // Form level (last resort)
+      'form[action*="/cart/add"]',        // Product form
+      '.product-form',                    // Form wrapper
+      '.product__form',                   // Alternative form wrapper
+    ];
+
+    let targetElement = null;
+    let insertAfterTarget = true;
+
+    // Find the best target element
+    for (const selector of buyButtonSelectors) {
+      const element = document.querySelector(selector);
+      if (element) {
+        // Make sure we're on a product page and this is the main product form area
+        // Avoid targeting elements in quick-view modals or other widgets
+        const isInMainContent = element.closest('main, .main-content, #MainContent, .product, .product-template, [data-product]');
+        const isNotInModal = !element.closest('.modal, .drawer, .quick-view, .cart-drawer, [role="dialog"]');
+
+        if (isInMainContent || isNotInModal) {
+          targetElement = element;
+          console.log('[AddonBundle] Found target for positioning:', selector);
+          break;
+        }
+      }
+    }
+
+    if (!targetElement) {
+      console.log('[AddonBundle] No suitable position found - widget stays in original location');
+      return;
+    }
+
+    // Determine the best insertion point
+    // For containers, insert after the container
+    // For individual buttons, find the parent container if possible
+    let insertionPoint = targetElement;
+
+    // If we found a button, try to find its container
+    if (targetElement.tagName === 'BUTTON' || targetElement.tagName === 'INPUT') {
+      const buttonContainer = targetElement.closest('.product-form__buttons, .product__submit-container, .buy-buttons, .product__buttons');
+      if (buttonContainer) {
+        insertionPoint = buttonContainer;
+      }
+    }
+
+    // For shopify-payment-button, it might be a sibling to the add to cart
+    // So we want to insert after all payment-related buttons
+    if (targetElement.classList.contains('shopify-payment-button') ||
+        targetElement.hasAttribute('data-shopify')) {
+      const parent = targetElement.parentElement;
+      if (parent) {
+        // Find the last payment/submit related element in the parent
+        const siblings = parent.children;
+        for (let i = siblings.length - 1; i >= 0; i--) {
+          const sibling = siblings[i];
+          if (sibling.classList.contains('shopify-payment-button') ||
+              sibling.hasAttribute('data-shopify') ||
+              sibling.querySelector('button[name="add"], .product-form__submit')) {
+            insertionPoint = sibling;
+            break;
+          }
+        }
+      }
+    }
+
+    // Check if widget is already positioned correctly
+    const nextSibling = insertionPoint.nextElementSibling;
+    if (nextSibling === widget) {
+      console.log('[AddonBundle] Widget already in optimal position');
+      return;
+    }
+
+    // Move the widget
+    console.log('[AddonBundle] Auto-positioning widget after:', insertionPoint.tagName, insertionPoint.className);
+
+    // Add a small margin for visual separation
+    widget.style.marginTop = widget.style.marginTop || 'var(--addon-margin-top, 16px)';
+
+    // Insert after the target
+    insertionPoint.parentNode.insertBefore(widget, insertionPoint.nextSibling);
+
+    console.log('[AddonBundle] Widget repositioned successfully');
+  }
+
+  /**
    * Initialize the widget
    */
   function init() {
@@ -37,11 +173,22 @@
     const widget = document.querySelector('.addon-bundle-widget');
     if (!widget) return;
 
+    // Auto-position widget near buy buttons for optimal UX
+    autoPositionWidget(widget);
+
     state.bundleId = widget.dataset.bundleId;
     state.productId = widget.dataset.productId;
+    state.deleteAddonsOnMainDelete = widget.dataset.deleteAddonsOnMainDelete === 'true';
+    state.showSoldOutLabel = widget.dataset.showSoldOutLabel === 'true';
+    state.soldOutLabelText = widget.dataset.soldOutLabelText || 'Sold out';
     state.initialized = true;
 
-    console.log('[AddonBundle] Widget initialized', { bundleId: state.bundleId });
+    console.log('[AddonBundle] Widget initialized', {
+      bundleId: state.bundleId,
+      deleteAddonsOnMainDelete: state.deleteAddonsOnMainDelete,
+      showSoldOutLabel: state.showSoldOutLabel,
+      soldOutLabelText: state.soldOutLabelText
+    });
 
     // Setup all listeners
     setupSelectionListeners();
@@ -49,18 +196,394 @@
     setupQuantityListeners();
     initializeSelections();
 
+    // Initialize countdown timer if present
+    initCountdownTimer();
+
+    // Fetch and update prices for current market/region
+    fetchMarketPrices();
+
     // CRITICAL: Override the add to cart behavior
     overrideAddToCart();
+
+    // Start cart monitoring for auto-removal of orphaned add-ons
+    initCartMonitoring();
   }
 
   /**
-   * Initialize selections from pre-checked items
+   * Fetch market-specific prices for all add-on products
+   * Uses Shopify's AJAX API which automatically returns prices in the current market's currency
+   */
+  async function fetchMarketPrices() {
+    const addonItems = document.querySelectorAll('.addon-item');
+    if (addonItems.length === 0) return;
+
+    // Collect all unique product handles from data attributes
+    const productHandles = new Map(); // handle -> array of addon elements
+
+    addonItems.forEach(item => {
+      const handle = item.dataset.productHandle;
+      if (handle) {
+        if (!productHandles.has(handle)) {
+          productHandles.set(handle, []);
+        }
+        productHandles.get(handle).push(item);
+      }
+    });
+
+    if (productHandles.size === 0) {
+      console.log('[AddonBundle] No product handles found for price fetching');
+      return;
+    }
+
+    console.log('[AddonBundle] Fetching market prices for', productHandles.size, 'products');
+
+    // Fetch each product's data and update prices
+    const fetchPromises = [];
+    productHandles.forEach((items, handle) => {
+      fetchPromises.push(
+        fetchProductPrices(handle)
+          .then(productData => {
+            if (productData) {
+              updateAddonPrices(items, productData);
+            }
+          })
+          .catch(err => {
+            console.error('[AddonBundle] Error fetching prices for', handle, err);
+          })
+      );
+    });
+
+    await Promise.all(fetchPromises);
+    console.log('[AddonBundle] Market prices updated');
+  }
+
+  /**
+   * Fetch product data from Shopify AJAX API
+   * Returns product with market-specific prices
+   */
+  async function fetchProductPrices(handle) {
+    try {
+      const response = await fetch(`/products/${handle}.js`);
+      if (!response.ok) {
+        console.warn('[AddonBundle] Failed to fetch product:', handle, response.status);
+        return null;
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('[AddonBundle] Error fetching product:', handle, error);
+      return null;
+    }
+  }
+
+  /**
+   * Update addon item prices with market-specific data
+   * Also updates sold-out states based on inventory availability
+   */
+  function updateAddonPrices(addonItems, productData) {
+    if (!productData || !productData.variants) return;
+
+    // Create a map of variant ID to variant data for quick lookup
+    const variantMap = new Map();
+    let availableVariantCount = 0;
+    let totalVariantCount = productData.variants.length;
+
+    productData.variants.forEach(variant => {
+      variantMap.set(String(variant.id), variant);
+      if (variant.available) {
+        availableVariantCount++;
+      }
+    });
+
+    const allVariantsSoldOut = availableVariantCount === 0;
+
+    addonItems.forEach(item => {
+      const variantId = extractNumericId(item.dataset.variantId);
+      if (!variantId) return;
+
+      const variant = variantMap.get(variantId);
+      if (!variant) {
+        console.warn('[AddonBundle] Variant not found:', variantId, 'in product', productData.handle);
+        return;
+      }
+
+      // Get the market price (in cents, convert to dollars)
+      const marketPrice = variant.price / 100;
+
+      // Update the data attribute with the new price
+      item.dataset.originalPrice = marketPrice;
+
+      // Get discount info from the input element
+      const input = item.querySelector('.addon-item__input');
+      const discountType = input?.dataset.discountType;
+      const discountValue = parseFloat(input?.dataset.discountValue) || 0;
+
+      // Calculate discounted price
+      let discountedPrice = marketPrice;
+      let hasDiscount = false;
+
+      switch (discountType) {
+        case 'PERCENTAGE':
+          if (discountValue > 0) {
+            discountedPrice = marketPrice - (marketPrice * discountValue / 100);
+            hasDiscount = true;
+          }
+          break;
+        case 'FIXED_AMOUNT':
+          if (discountValue > 0) {
+            discountedPrice = Math.max(0, marketPrice - discountValue);
+            hasDiscount = true;
+          }
+          break;
+        case 'FIXED_PRICE':
+          discountedPrice = discountValue;
+          hasDiscount = true;
+          break;
+        case 'FREE_GIFT':
+          discountedPrice = 0;
+          hasDiscount = true;
+          break;
+      }
+
+      item.dataset.discountedPrice = discountedPrice;
+
+      // Update the price display in the DOM
+      const priceRow = item.querySelector('.addon-item__price-row');
+      if (priceRow) {
+        // Format prices using the shop's currency format
+        const formattedOriginal = formatMoney(marketPrice * 100);
+        const formattedDiscounted = discountedPrice === 0 ? 'FREE' : formatMoney(discountedPrice * 100);
+
+        if (hasDiscount) {
+          priceRow.innerHTML = `
+            <span class="addon-item__price addon-item__price--original">${formattedOriginal}</span>
+            <span class="addon-item__price addon-item__price--discounted">${formattedDiscounted}</span>
+          `;
+        } else {
+          priceRow.innerHTML = `
+            <span class="addon-item__price">${formattedOriginal}</span>
+          `;
+        }
+      }
+
+      // Update sold-out state dynamically based on real-time inventory
+      if (state.showSoldOutLabel) {
+        updateSoldOutState(item, variant, variantMap, allVariantsSoldOut);
+      }
+
+      // Also update variant select dropdown if present
+      const variantSelect = item.querySelector('.addon-item__variant-select');
+      if (variantSelect) {
+        Array.from(variantSelect.options).forEach(option => {
+          const optionVariantId = option.value;
+          const optionVariant = variantMap.get(extractNumericId(optionVariantId));
+          if (optionVariant) {
+            const optionPrice = optionVariant.price / 100;
+            option.dataset.price = optionPrice;
+            // Update option text to show new price and sold-out status
+            const variantTitle = optionVariant.title || optionVariant.option1;
+            const soldOutSuffix = (!optionVariant.available && state.showSoldOutLabel) ? ` (${state.soldOutLabelText})` : '';
+            option.textContent = `${variantTitle} - ${formatMoney(optionVariant.price)}${soldOutSuffix}`;
+
+            // Update sold-out attribute and disabled state
+            if (!optionVariant.available && state.showSoldOutLabel) {
+              option.dataset.soldOut = 'true';
+              option.disabled = true;
+            } else {
+              option.dataset.soldOut = 'false';
+              option.disabled = false;
+            }
+          }
+        });
+
+        // If currently selected option is sold out, try to select an available one
+        if (variantSelect.selectedOptions[0]?.dataset.soldOut === 'true') {
+          const availableOption = Array.from(variantSelect.options).find(
+            opt => opt.dataset.soldOut !== 'true' && !opt.disabled
+          );
+          if (availableOption) {
+            variantSelect.value = availableOption.value;
+            variantSelect.dispatchEvent(new Event('change'));
+          }
+        }
+      }
+    });
+  }
+
+  /**
+   * Update sold-out state for a single addon item
+   */
+  function updateSoldOutState(item, variant, variantMap, allVariantsSoldOut) {
+    const input = item.querySelector('.addon-item__input');
+    const checkbox = item.querySelector('.addon-item__checkbox-custom');
+    const hasMultipleVariants = item.dataset.hasMultipleVariants === 'true';
+
+    // Determine if this item should show as sold out
+    const isSoldOut = allVariantsSoldOut || (!hasMultipleVariants && !variant.available);
+
+    if (isSoldOut) {
+      // Add sold-out classes
+      item.classList.add('addon-item--sold-out');
+      if (allVariantsSoldOut) {
+        item.classList.add('addon-item--all-sold-out');
+      }
+
+      // Disable input
+      if (input) {
+        input.disabled = true;
+        input.checked = false;
+      }
+      if (checkbox) {
+        checkbox.classList.add('addon-item__checkbox-custom--disabled');
+      }
+
+      // Add overlay if not already present
+      if (!item.querySelector('.addon-item__sold-out-overlay')) {
+        const overlay = document.createElement('div');
+        overlay.className = 'addon-item__sold-out-overlay';
+        overlay.innerHTML = `<span class="addon-item__sold-out-label">${state.soldOutLabelText}</span>`;
+        item.insertBefore(overlay, item.firstChild);
+      }
+
+      // Update data attributes
+      item.dataset.soldOut = 'true';
+      item.dataset.allVariantsSoldOut = String(allVariantsSoldOut);
+
+      // Remove from selections if was selected
+      const addonId = item.dataset.addonId;
+      if (state.selectedAddOns.has(addonId)) {
+        state.selectedAddOns.delete(addonId);
+        item.classList.remove('addon-item--selected');
+        console.log('[AddonBundle] Removed sold-out item from selections:', addonId);
+      }
+    } else {
+      // Remove sold-out state if item is now available
+      item.classList.remove('addon-item--sold-out', 'addon-item--all-sold-out');
+
+      if (input) {
+        input.disabled = false;
+      }
+      if (checkbox) {
+        checkbox.classList.remove('addon-item__checkbox-custom--disabled');
+      }
+
+      // Remove overlay
+      const overlay = item.querySelector('.addon-item__sold-out-overlay');
+      if (overlay) {
+        overlay.remove();
+      }
+
+      // Update data attributes
+      item.dataset.soldOut = 'false';
+      item.dataset.allVariantsSoldOut = 'false';
+    }
+  }
+
+  /**
+   * Format money using Shopify's money format
+   * Falls back to basic formatting if Shopify.formatMoney is not available
+   */
+  function formatMoney(cents) {
+    // Try to use Shopify's built-in formatMoney if available
+    if (window.Shopify && window.Shopify.formatMoney) {
+      return window.Shopify.formatMoney(cents, window.theme?.moneyFormat || '${{amount}}');
+    }
+
+    // Fallback: basic currency formatting
+    const amount = (cents / 100).toFixed(2);
+    const currencySymbol = window.Shopify?.currency?.symbol || '$';
+    return `${currencySymbol}${amount}`;
+  }
+
+  /**
+   * Initialize countdown timer
+   */
+  function initCountdownTimer() {
+    const countdownEl = document.querySelector('.addon-bundle-widget__countdown');
+    if (!countdownEl) return;
+
+    const endDateStr = countdownEl.dataset.countdownTarget;
+    if (!endDateStr) return;
+
+    const endDate = new Date(endDateStr);
+    if (isNaN(endDate.getTime())) {
+      console.error('[AddonBundle] Invalid countdown end date:', endDateStr);
+      return;
+    }
+
+    console.log('[AddonBundle] Countdown initialized, ends:', endDate);
+
+    const daysEl = countdownEl.querySelector('[data-days]');
+    const hoursEl = countdownEl.querySelector('[data-hours]');
+    const minutesEl = countdownEl.querySelector('[data-minutes]');
+    const secondsEl = countdownEl.querySelector('[data-seconds]');
+    const countdownContainer = countdownEl.querySelector('.addon-countdown');
+
+    function updateCountdown() {
+      const now = new Date();
+      const diff = endDate - now;
+
+      if (diff <= 0) {
+        // Countdown expired
+        if (daysEl) daysEl.textContent = '00';
+        if (hoursEl) hoursEl.textContent = '00';
+        if (minutesEl) minutesEl.textContent = '00';
+        if (secondsEl) secondsEl.textContent = '00';
+        if (countdownContainer) countdownContainer.classList.add('addon-countdown--expired');
+        return false;
+      }
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      if (daysEl) daysEl.textContent = String(days).padStart(2, '0');
+      if (hoursEl) hoursEl.textContent = String(hours).padStart(2, '0');
+      if (minutesEl) minutesEl.textContent = String(minutes).padStart(2, '0');
+      if (secondsEl) secondsEl.textContent = String(seconds).padStart(2, '0');
+
+      return true;
+    }
+
+    // Initial update
+    if (updateCountdown()) {
+      // Update every second
+      setInterval(updateCountdown, 1000);
+    }
+  }
+
+  /**
+   * Initialize selections from pre-checked items and auto-select FREE_GIFT items
    */
   function initializeSelections() {
+    // Auto-select all FREE_GIFT items (they are always included)
+    // But skip sold-out FREE_GIFT items
+    document.querySelectorAll('.addon-item--free-gift').forEach(addonItem => {
+      // Skip sold-out free gifts
+      if (addonItem.dataset.soldOut === 'true' || addonItem.dataset.allVariantsSoldOut === 'true') {
+        console.log('[AddonBundle] Skipping sold-out FREE_GIFT:', addonItem.dataset.addonId);
+        return;
+      }
+      updateSelectionState(addonItem, true);
+      addonItem.classList.add('addon-item--selected');
+      console.log('[AddonBundle] Auto-selected FREE_GIFT:', addonItem.dataset.addonId);
+    });
+
+    // Initialize regular pre-checked items
     document.querySelectorAll('.addon-item__input:checked').forEach(input => {
       const addonItem = input.closest('.addon-item');
-      if (addonItem) updateSelectionState(addonItem, true);
+      // Skip if it's a free gift (already handled above) or sold out
+      if (addonItem && !addonItem.classList.contains('addon-item--free-gift')) {
+        // Skip sold-out items
+        if (addonItem.dataset.soldOut === 'true' || addonItem.dataset.allVariantsSoldOut === 'true') {
+          input.checked = false;
+          console.log('[AddonBundle] Unchecking sold-out pre-selected item:', addonItem.dataset.addonId);
+          return;
+        }
+        updateSelectionState(addonItem, true);
+      }
     });
+
     console.log('[AddonBundle] Initial selections:', state.selectedAddOns.size);
   }
 
@@ -71,6 +594,14 @@
     document.querySelectorAll('.addon-item__input').forEach(input => {
       input.addEventListener('change', (e) => {
         const addonItem = e.target.closest('.addon-item');
+
+        // Prevent selection of sold-out items
+        if (addonItem?.dataset.soldOut === 'true' || addonItem?.dataset.allVariantsSoldOut === 'true') {
+          e.target.checked = false;
+          console.log('[AddonBundle] Prevented selection of sold-out item');
+          return;
+        }
+
         const isSelected = e.target.checked;
 
         // For radio buttons, clear other selections first
@@ -171,12 +702,96 @@
     document.querySelectorAll('.addon-item__variant-select').forEach(select => {
       select.addEventListener('change', (e) => {
         const addonId = e.target.dataset.addonId;
+        const addonItem = e.target.closest('.addon-item');
+        const selectedOption = e.target.options[e.target.selectedIndex];
+
+        // Check if selected variant is sold out
+        if (selectedOption?.dataset.soldOut === 'true' && state.showSoldOutLabel) {
+          // Try to select an available variant instead
+          const availableOption = Array.from(e.target.options).find(
+            opt => opt.dataset.soldOut !== 'true' && !opt.disabled
+          );
+          if (availableOption) {
+            e.target.value = availableOption.value;
+            console.log('[AddonBundle] Auto-selected available variant instead of sold-out');
+          } else {
+            console.log('[AddonBundle] No available variants found');
+          }
+          return;
+        }
+
         const selection = state.selectedAddOns.get(addonId);
         if (selection) {
           selection.variantId = extractNumericId(e.target.value);
         }
+
+        // Update price display when variant changes
+        const newPrice = selectedOption?.dataset.price;
+
+        if (addonItem && newPrice) {
+          updatePriceDisplay(addonItem, parseFloat(newPrice));
+        }
       });
     });
+  }
+
+  /**
+   * Update price display for an addon item
+   * @param {Element} addonItem - The addon item element
+   * @param {number} originalPrice - Price in dollars (not cents)
+   */
+  function updatePriceDisplay(addonItem, originalPrice) {
+    const priceRow = addonItem.querySelector('.addon-item__price-row');
+    if (!priceRow) return;
+
+    const input = addonItem.querySelector('.addon-item__input');
+    const discountType = input?.dataset.discountType;
+    const discountValue = parseFloat(input?.dataset.discountValue) || 0;
+
+    let discountedPrice = originalPrice;
+    let hasDiscount = false;
+
+    switch (discountType) {
+      case 'PERCENTAGE':
+        if (discountValue > 0) {
+          discountedPrice = originalPrice - (originalPrice * discountValue / 100);
+          hasDiscount = true;
+        }
+        break;
+      case 'FIXED_AMOUNT':
+        if (discountValue > 0) {
+          discountedPrice = Math.max(0, originalPrice - discountValue);
+          hasDiscount = true;
+        }
+        break;
+      case 'FIXED_PRICE':
+        discountedPrice = discountValue;
+        hasDiscount = true;
+        break;
+      case 'FREE_GIFT':
+        discountedPrice = 0;
+        hasDiscount = true;
+        break;
+    }
+
+    // Update data attributes
+    addonItem.dataset.originalPrice = originalPrice;
+    addonItem.dataset.discountedPrice = discountedPrice;
+
+    // Format prices (convert to cents for formatMoney)
+    const formattedOriginal = formatMoney(originalPrice * 100);
+    const formattedDiscounted = discountedPrice === 0 ? 'FREE' : formatMoney(discountedPrice * 100);
+
+    if (hasDiscount) {
+      priceRow.innerHTML = `
+        <span class="addon-item__price addon-item__price--original">${formattedOriginal}</span>
+        <span class="addon-item__price addon-item__price--discounted">${formattedDiscounted}</span>
+      `;
+    } else {
+      priceRow.innerHTML = `
+        <span class="addon-item__price">${formattedOriginal}</span>
+      `;
+    }
   }
 
   /**
@@ -209,8 +824,8 @@
         return originalFetch.apply(this, arguments);
       }
 
-      // Intercept cart/add requests
-      if (urlStr.includes('/cart/add') && state.selectedAddOns.size > 0) {
+      // Intercept cart/add requests (always intercept if there are add-ons, including free gifts)
+      if (urlStr.includes('/cart/add') && (state.selectedAddOns.size > 0 || hasFreeGiftAddons())) {
         console.log('[AddonBundle] Intercepting fetch to /cart/add');
         return handleCartAddIntercept(url, options, originalFetch);
       }
@@ -230,7 +845,7 @@
     XMLHttpRequest.prototype.send = function(body) {
       if (this._addonBundleUrl &&
           this._addonBundleUrl.includes('/cart/add') &&
-          state.selectedAddOns.size > 0) {
+          (state.selectedAddOns.size > 0 || hasFreeGiftAddons())) {
         console.log('[AddonBundle] Intercepting XHR to /cart/add');
         // Add our items to the request
         handleXHRCartAdd(this, body, originalXHRSend);
@@ -283,34 +898,70 @@
         }
       }
 
+      // Generate unique bundle group ID for this add-to-cart action
+      const bundleGroupId = generateBundleGroupId();
+
+      // Common bundle properties for tracking
+      const bundleProperties = {
+        _bundle_group_id: bundleGroupId,
+        _bundle_id: state.bundleId
+      };
+
       // Build combined items array
       const allItems = [];
 
+      // Get main product variant ID for nested cart lines
+      let mainVariantId = null;
+
+      // Add main product with bundle properties
       if (mainItem && mainItem.id) {
+        mainVariantId = parseInt(extractNumericId(mainItem.id));
         allItems.push({
-          id: parseInt(extractNumericId(mainItem.id)),
-          quantity: mainItem.quantity
+          id: mainVariantId,
+          quantity: mainItem.quantity,
+          properties: {
+            ...bundleProperties,
+            _bundle_role: 'main'
+          }
         });
       } else if (items.length > 0) {
-        items.forEach(item => {
+        // If multiple items were in original request, mark the first as main
+        mainVariantId = parseInt(extractNumericId(items[0].id));
+        items.forEach((item, index) => {
           allItems.push({
             id: parseInt(extractNumericId(item.id)),
-            quantity: item.quantity || 1
+            quantity: item.quantity || 1,
+            properties: index === 0 ? {
+              ...bundleProperties,
+              _bundle_role: 'main'
+            } : item.properties
           });
         });
       }
 
-      // Add selected add-ons
+      // Add selected add-ons as NESTED CART LINES (children of main product)
+      // When deleteAddonsOnMainDelete is true, use parent_id to create nested relationship
+      // Shopify will automatically remove children when parent is removed
       state.selectedAddOns.forEach(selection => {
         if (selection.variantId) {
-          allItems.push({
+          const addonItem = {
             id: parseInt(selection.variantId),
             quantity: selection.quantity || 1,
             properties: {
+              ...bundleProperties,
+              _bundle_role: 'addon',
               _addon_bundle_id: state.bundleId,
               _addon_main_product: state.productId
             }
-          });
+          };
+
+          // If deleteAddonsOnMainDelete is enabled, create nested cart line
+          // by specifying parent_id (Shopify will auto-remove when parent is removed)
+          if (state.deleteAddonsOnMainDelete && mainVariantId) {
+            addonItem.parent_id = mainVariantId;
+          }
+
+          allItems.push(addonItem);
         }
       });
 
@@ -330,7 +981,19 @@
 
         if (response.ok) {
           console.log('[AddonBundle] Successfully added all items to cart');
-          showNotification(`Added to cart with ${state.selectedAddOns.size} add-on(s)!`);
+          const freeGiftCount = document.querySelectorAll('.addon-item--free-gift').length;
+          const regularCount = state.selectedAddOns.size - freeGiftCount;
+          let message = 'Added to cart';
+          if (freeGiftCount > 0 && regularCount > 0) {
+            message += ` with ${regularCount} add-on(s) + ${freeGiftCount} free gift(s)!`;
+          } else if (freeGiftCount > 0) {
+            message += ` with ${freeGiftCount} free gift(s)!`;
+          } else if (regularCount > 0) {
+            message += ` with ${regularCount} add-on(s)!`;
+          } else {
+            message += '!';
+          }
+          showNotification(message);
           refreshCartUI();
         }
 
@@ -348,6 +1011,15 @@
    * Handle XHR cart add interception
    */
   function handleXHRCartAdd(xhr, body, originalSend) {
+    // Generate unique bundle group ID for this add-to-cart action
+    const bundleGroupId = generateBundleGroupId();
+
+    // Common bundle properties for tracking
+    const bundleProperties = {
+      _bundle_group_id: bundleGroupId,
+      _bundle_id: state.bundleId
+    };
+
     // Parse original body
     let mainItem = null;
 
@@ -376,23 +1048,43 @@
     // Build items array
     const items = [];
 
+    // Get main product variant ID for nested cart lines
+    let mainVariantId = null;
+
+    // Add main product with bundle properties
     if (mainItem && mainItem.id) {
+      mainVariantId = parseInt(extractNumericId(mainItem.id));
       items.push({
-        id: parseInt(extractNumericId(mainItem.id)),
-        quantity: mainItem.quantity
+        id: mainVariantId,
+        quantity: mainItem.quantity,
+        properties: {
+          ...bundleProperties,
+          _bundle_role: 'main'
+        }
       });
     }
 
+    // Add addons as NESTED CART LINES (children of main product)
+    // When deleteAddonsOnMainDelete is true, use parent_id to create nested relationship
     state.selectedAddOns.forEach(selection => {
       if (selection.variantId) {
-        items.push({
+        const addonItem = {
           id: parseInt(selection.variantId),
           quantity: selection.quantity || 1,
           properties: {
+            ...bundleProperties,
+            _bundle_role: 'addon',
             _addon_bundle_id: state.bundleId,
             _addon_main_product: state.productId
           }
-        });
+        };
+
+        // If deleteAddonsOnMainDelete is enabled, create nested cart line
+        if (state.deleteAddonsOnMainDelete && mainVariantId) {
+          addonItem.parent_id = mainVariantId;
+        }
+
+        items.push(addonItem);
       }
     });
 
@@ -411,12 +1103,19 @@
   }
 
   /**
+   * Check if there are any FREE_GIFT add-ons on the page
+   */
+  function hasFreeGiftAddons() {
+    return document.querySelectorAll('.addon-item--free-gift').length > 0;
+  }
+
+  /**
    * Handle form submit
    */
   function handleFormSubmit(e) {
     const form = e.target;
     if (!form.matches || !form.matches('form[action*="/cart/add"]')) return;
-    if (state.selectedAddOns.size === 0) return;
+    if (state.selectedAddOns.size === 0 && !hasFreeGiftAddons()) return;
 
     e.preventDefault();
     e.stopImmediatePropagation();
@@ -445,7 +1144,7 @@
 
     const form = button.closest('form[action*="/cart/add"]');
     if (!form) return;
-    if (state.selectedAddOns.size === 0) return;
+    if (state.selectedAddOns.size === 0 && !hasFreeGiftAddons()) return;
 
     // Check if this is the add to cart button
     const isAddToCart = button.matches('[type="submit"]') ||
@@ -465,21 +1164,49 @@
    * Add main product and add-ons to cart
    */
   async function addAllItemsToCart(mainVariantId, mainQuantity) {
+    // Generate unique bundle group ID for this add-to-cart action
+    const bundleGroupId = generateBundleGroupId();
+
+    // Common bundle properties for tracking
+    const bundleProperties = {
+      _bundle_group_id: bundleGroupId,
+      _bundle_id: state.bundleId
+    };
+
+    // Parse main variant ID
+    const parsedMainVariantId = parseInt(mainVariantId);
+
+    // Add main product with bundle properties
     const items = [{
-      id: parseInt(mainVariantId),
-      quantity: mainQuantity
+      id: parsedMainVariantId,
+      quantity: mainQuantity,
+      properties: {
+        ...bundleProperties,
+        _bundle_role: 'main'
+      }
     }];
 
+    // Add addons as NESTED CART LINES (children of main product)
+    // When deleteAddonsOnMainDelete is true, use parent_id to create nested relationship
     state.selectedAddOns.forEach(selection => {
       if (selection.variantId) {
-        items.push({
+        const addonItem = {
           id: parseInt(selection.variantId),
           quantity: selection.quantity || 1,
           properties: {
+            ...bundleProperties,
+            _bundle_role: 'addon',
             _addon_bundle_id: state.bundleId,
             _addon_main_product: state.productId
           }
-        });
+        };
+
+        // If deleteAddonsOnMainDelete is enabled, create nested cart line
+        if (state.deleteAddonsOnMainDelete && parsedMainVariantId) {
+          addonItem.parent_id = parsedMainVariantId;
+        }
+
+        items.push(addonItem);
       }
     });
 
@@ -572,21 +1299,271 @@
       .catch(console.error);
   }
 
+  // ============================================
+  // CART MONITORING - Auto-remove orphaned add-ons
+  // ============================================
+
+  let cartMonitoringEnabled = false;
+  let lastKnownCart = null;
+  let isProcessingRemoval = false;
+
+  /**
+   * Initialize cart monitoring to detect when main products are removed
+   * and automatically remove their associated add-ons
+   */
+  function initCartMonitoring() {
+    if (cartMonitoringEnabled) return;
+    cartMonitoringEnabled = true;
+
+    console.log('[AddonBundle] Cart monitoring initialized');
+
+    // Get initial cart state
+    fetchCartState();
+
+    // Listen for various cart update events
+    document.addEventListener('cart:refresh', handleCartChange);
+    document.addEventListener('cart:updated', handleCartChange);
+    document.addEventListener('cart:change', handleCartChange);
+
+    // Override cart change/update requests to detect removals
+    overrideCartChangeRequests();
+
+    // Also poll periodically as a fallback (every 3 seconds when on cart page)
+    if (window.location.pathname.includes('/cart')) {
+      setInterval(fetchCartState, 3000);
+    }
+  }
+
+  /**
+   * Override fetch to intercept cart change requests
+   */
+  function overrideCartChangeRequests() {
+    const originalFetch = window.fetch;
+
+    window.fetch = async function(url, options = {}) {
+      const response = await originalFetch.apply(this, arguments);
+
+      // Check if this was a cart update or change request
+      const urlStr = typeof url === 'string' ? url : url?.url || '';
+      if (urlStr.includes('/cart/change') || urlStr.includes('/cart/update')) {
+        // After cart change, check for orphaned add-ons
+        setTimeout(() => {
+          if (!isProcessingRemoval) {
+            checkForOrphanedAddons();
+          }
+        }, 500);
+      }
+
+      return response;
+    };
+  }
+
+  /**
+   * Fetch current cart state
+   */
+  async function fetchCartState() {
+    try {
+      const response = await fetch('/cart.js');
+      if (!response.ok) return;
+
+      const cart = await response.json();
+      const previousCart = lastKnownCart;
+      lastKnownCart = cart;
+
+      // If this isn't the initial load, check for removed items
+      if (previousCart && !isProcessingRemoval) {
+        checkForOrphanedAddons();
+      }
+    } catch (error) {
+      console.error('[AddonBundle] Error fetching cart:', error);
+    }
+  }
+
+  /**
+   * Handle cart change events
+   */
+  function handleCartChange(event) {
+    if (isProcessingRemoval) return;
+
+    // Update cart state if provided in event
+    if (event.detail?.cart) {
+      lastKnownCart = event.detail.cart;
+    }
+
+    // Check for orphaned add-ons after a short delay
+    setTimeout(checkForOrphanedAddons, 300);
+  }
+
+  /**
+   * Check if any add-ons are orphaned (main product removed)
+   * and remove them if deleteAddonsOnMainDelete is true
+   */
+  async function checkForOrphanedAddons() {
+    if (isProcessingRemoval) return;
+
+    try {
+      // Fetch fresh cart data
+      const response = await fetch('/cart.js');
+      if (!response.ok) return;
+
+      const cart = await response.json();
+
+      // Group items by bundle_group_id
+      const bundleGroups = new Map();
+
+      cart.items.forEach((item, index) => {
+        const groupId = item.properties?._bundle_group_id;
+        const role = item.properties?._bundle_role;
+        const deleteFlag = item.properties?._delete_addons_on_main_delete;
+
+        if (!groupId || !role) return;
+
+        if (!bundleGroups.has(groupId)) {
+          bundleGroups.set(groupId, {
+            groupId,
+            deleteAddonsOnMainDelete: deleteFlag === 'true',
+            mainItem: null,
+            addonItems: []
+          });
+        }
+
+        const group = bundleGroups.get(groupId);
+
+        if (role === 'main') {
+          group.mainItem = { ...item, lineIndex: index + 1, key: item.key };
+        } else if (role === 'addon') {
+          group.addonItems.push({ ...item, lineIndex: index + 1, key: item.key });
+        }
+
+        // Use the flag from any item in the group
+        if (deleteFlag === 'true') {
+          group.deleteAddonsOnMainDelete = true;
+        }
+      });
+
+      // Find orphaned add-ons (add-ons without their main product)
+      const addonsToRemove = [];
+
+      bundleGroups.forEach((group, groupId) => {
+        // If main product is missing and flag is true, remove addons
+        if (!group.mainItem && group.deleteAddonsOnMainDelete && group.addonItems.length > 0) {
+          console.log('[AddonBundle] Orphaned add-ons detected for group:', groupId);
+          group.addonItems.forEach(addon => {
+            addonsToRemove.push(addon);
+          });
+        }
+      });
+
+      // Remove orphaned add-ons
+      if (addonsToRemove.length > 0) {
+        await removeOrphanedAddons(addonsToRemove);
+      }
+    } catch (error) {
+      console.error('[AddonBundle] Error checking for orphaned add-ons:', error);
+    }
+  }
+
+  /**
+   * Remove orphaned add-ons from the cart
+   */
+  async function removeOrphanedAddons(addons) {
+    if (addons.length === 0) return;
+
+    isProcessingRemoval = true;
+    console.log('[AddonBundle] Removing', addons.length, 'orphaned add-on(s)');
+
+    try {
+      // Build updates object to set quantities to 0
+      const updates = {};
+      addons.forEach(addon => {
+        // Use the item key for accurate targeting
+        if (addon.key) {
+          updates[addon.key] = 0;
+        }
+      });
+
+      // Make the cart update request
+      const response = await fetch('/cart/update.js', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates })
+      });
+
+      if (response.ok) {
+        console.log('[AddonBundle] Successfully removed orphaned add-ons');
+
+        // Show notification
+        const message = addons.length === 1
+          ? 'Add-on removed (main product was removed)'
+          : `${addons.length} add-ons removed (main product was removed)`;
+        showNotification(message);
+
+        // Refresh cart UI
+        refreshCartUI();
+      } else {
+        console.error('[AddonBundle] Failed to remove add-ons:', await response.text());
+      }
+    } catch (error) {
+      console.error('[AddonBundle] Error removing add-ons:', error);
+    } finally {
+      isProcessingRemoval = false;
+    }
+  }
+
   // Public API
   window.AddonBundle = {
     getSelectedAddOns: () => Array.from(state.selectedAddOns.values()),
     getBundleId: () => state.bundleId,
     getState: () => ({ ...state }),
     addToCart: addAllItemsToCart,
+    checkOrphanedAddons: checkForOrphanedAddons,
+    isCartMonitoringEnabled: () => cartMonitoringEnabled,
   };
+
+  /**
+   * Initialize cart monitoring globally (runs on all pages)
+   * This ensures add-ons are removed even when main product is deleted from cart page
+   */
+  function initGlobalCartMonitoring() {
+    // Always start cart monitoring, even without the widget
+    // This ensures orphaned add-ons are cleaned up on cart page
+    if (!cartMonitoringEnabled) {
+      cartMonitoringEnabled = true;
+      console.log('[AddonBundle] Global cart monitoring initialized');
+
+      // Get initial cart state
+      fetchCartState();
+
+      // Listen for various cart update events
+      document.addEventListener('cart:refresh', handleCartChange);
+      document.addEventListener('cart:updated', handleCartChange);
+      document.addEventListener('cart:change', handleCartChange);
+
+      // Override cart change/update requests
+      overrideCartChangeRequests();
+
+      // Poll more frequently on cart page
+      if (window.location.pathname.includes('/cart')) {
+        setInterval(fetchCartState, 2000);
+      }
+    }
+  }
 
   // Initialize
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', () => {
+      init();
+      // Always init global cart monitoring
+      initGlobalCartMonitoring();
+    });
   } else {
     init();
+    initGlobalCartMonitoring();
   }
 
   // Fallback initialization
-  setTimeout(init, 500);
+  setTimeout(() => {
+    init();
+    initGlobalCartMonitoring();
+  }, 500);
 })();

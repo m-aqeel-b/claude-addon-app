@@ -45,6 +45,7 @@ export interface CreateBundleInput {
   combineWithProductDiscounts?: DiscountCombination;
   combineWithOrderDiscounts?: DiscountCombination;
   combineWithShippingDiscounts?: DiscountCombination;
+  deleteAddOnsWithMain?: boolean;
 }
 
 export interface UpdateBundleInput {
@@ -59,6 +60,9 @@ export interface UpdateBundleInput {
   combineWithOrderDiscounts?: DiscountCombination;
   combineWithShippingDiscounts?: DiscountCombination;
   shopifyDiscountId?: string | null;
+  deleteAddOnsWithMain?: boolean;
+  showSoldOutLabel?: boolean;
+  soldOutLabelText?: string;
 }
 
 export interface BundleListFilters {
@@ -326,6 +330,7 @@ export async function createBundle(
       combineWithProductDiscounts: input.combineWithProductDiscounts ?? "COMBINE",
       combineWithOrderDiscounts: input.combineWithOrderDiscounts ?? "COMBINE",
       combineWithShippingDiscounts: input.combineWithShippingDiscounts ?? "COMBINE",
+      deleteAddOnsWithMain: input.deleteAddOnsWithMain ?? false,
       // Create default widget style
       widgetStyle: {
         create: {},

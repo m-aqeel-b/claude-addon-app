@@ -1,0 +1,29 @@
+{% comment %}
+  Add-On Bundle App Embed
+  Loads the widget scripts and styles globally on all pages
+  This must be enabled in Theme Editor > App Embeds for the widget to function
+{% endcomment %}
+
+{% comment %}
+  The app embed loads the necessary JavaScript and CSS for the add-on bundle widget.
+  When enabled, this ensures the widget scripts are available on product pages.
+{% endcomment %}
+
+{% schema %}
+{
+  "name": "Add-On Bundle Widget",
+  "target": "head",
+  "stylesheet": "addon-bundle.css",
+  "javascript": "addon-bundle.js",
+  "settings": [
+    {
+      "type": "header",
+      "content": "Add-On Bundle Widget"
+    },
+    {
+      "type": "paragraph",
+      "content": "Enable this app embed to load the Add-On Bundle widget scripts on your store. This is required for the widget to function properly on product pages."
+    }
+  ]
+}
+{% endschema %}
