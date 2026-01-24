@@ -112,16 +112,36 @@ export function buildDiscountConfig(
 
 /**
  * Build widget configuration from bundle data
- * @param productHandles - Map of Shopify Product GID to product handle
+ * @param productHandles - Map of Shopify Product GID to product handle (for backwards compatibility)
+ * @param productInfo - Map of Shopify Product GID to ProductInfo (handle + status) - used for filtering
  */
 export function buildWidgetConfig(
   bundle: BundleWithRelations,
   addOnSets: Awaited<ReturnType<typeof getAddOnSets>>,
   widgetStyle: Awaited<ReturnType<typeof getWidgetStyle>>,
-  productHandles: Map<string, string> = new Map()
+  productHandles: Map<string, string> = new Map(),
+  productInfo?: Map<string, ProductInfo>
 ): WidgetConfig {
   // Type assertion for properties that may not be in Prisma client yet
   const bundleExt = bundle as Record<string, unknown>;
+
+  // Filter add-ons to only include Active products on the storefront
+  // Products with DRAFT or ARCHIVED status should not be shown
+  const filteredAddOnSets = productInfo
+    ? addOnSets.filter((addOn) => {
+        const info = productInfo.get(addOn.shopifyProductId);
+        if (!info) {
+          // Product not found in Shopify - might have been deleted
+          console.log("[Metafield Sync] Product not found, excluding:", addOn.shopifyProductId);
+          return false;
+        }
+        if (info.status !== "ACTIVE") {
+          console.log("[Metafield Sync] Excluding non-Active product:", addOn.shopifyProductId, "status:", info.status);
+          return false;
+        }
+        return true;
+      })
+    : addOnSets;
 
   return {
     bundleId: bundle.id,
@@ -136,10 +156,10 @@ export function buildWidgetConfig(
     // Sold-out handling
     showSoldOutLabel: Boolean(bundleExt.showSoldOutLabel) || false,
     soldOutLabelText: (bundleExt.soldOutLabelText as string) || "Sold out",
-    addOns: addOnSets.map((addOn) => ({
+    addOns: filteredAddOnSets.map((addOn) => ({
       addOnId: addOn.id,
       shopifyProductId: addOn.shopifyProductId,
-      productHandle: productHandles.get(addOn.shopifyProductId) || null,
+      productHandle: productHandles.get(addOn.shopifyProductId) || productInfo?.get(addOn.shopifyProductId)?.handle || null,
       productTitle: addOn.productTitle,
       imageUrl: addOn.productImageUrl || addOn.customImageUrl,
       title: addOn.title,
@@ -208,17 +228,44 @@ function getDefaultMessage(discountType: string, value: unknown): string {
 }
 
 /**
- * Fetch product handles from Shopify for a list of product GIDs
- * Returns a Map of product GID -> handle
+ * Product info type returned from Shopify
+ */
+interface ProductInfo {
+  handle: string;
+  status: "ACTIVE" | "ARCHIVED" | "DRAFT";
+}
+
+/**
+ * Fetch product handles and status from Shopify for a list of product GIDs
+ * Returns a Map of product GID -> ProductInfo (handle and status)
  */
 export async function fetchProductHandles(
   admin: AdminGraphQLClient,
   productIds: string[]
 ): Promise<Map<string, string>> {
+  // Use the new function and just return handles for backwards compatibility
+  const productInfo = await fetchProductInfo(admin, productIds);
   const handles = new Map<string, string>();
 
+  for (const [id, info] of productInfo) {
+    handles.set(id, info.handle);
+  }
+
+  return handles;
+}
+
+/**
+ * Fetch product handles and status from Shopify for a list of product GIDs
+ * Returns a Map of product GID -> ProductInfo (handle and status)
+ */
+export async function fetchProductInfo(
+  admin: AdminGraphQLClient,
+  productIds: string[]
+): Promise<Map<string, ProductInfo>> {
+  const productInfoMap = new Map<string, ProductInfo>();
+
   if (productIds.length === 0) {
-    return handles;
+    return productInfoMap;
   }
 
   // Process in chunks of 50 (GraphQL nodes query limit)
@@ -228,11 +275,12 @@ export async function fetchProductHandles(
     try {
       const response = await admin.graphql(
         `#graphql
-        query GetProductHandles($ids: [ID!]!) {
+        query GetProductInfo($ids: [ID!]!) {
           nodes(ids: $ids) {
             ... on Product {
               id
               handle
+              status
             }
           }
         }`,
@@ -242,20 +290,43 @@ export async function fetchProductHandles(
       );
 
       const result = await response.json();
-      const nodes = (result.data as { nodes?: Array<{ id: string; handle: string }> })?.nodes || [];
+      const nodes = (result.data as { nodes?: Array<{ id: string; handle: string; status: "ACTIVE" | "ARCHIVED" | "DRAFT" }> })?.nodes || [];
 
       for (const node of nodes) {
         if (node?.id && node?.handle) {
-          handles.set(node.id, node.handle);
+          productInfoMap.set(node.id, {
+            handle: node.handle,
+            status: node.status || "DRAFT",
+          });
         }
       }
     } catch (error) {
-      console.error("[Metafield Sync] Error fetching product handles:", error);
+      console.error("[Metafield Sync] Error fetching product info:", error);
     }
   }
 
-  console.log("[Metafield Sync] Fetched handles for", handles.size, "products");
-  return handles;
+  console.log("[Metafield Sync] Fetched info for", productInfoMap.size, "products");
+  return productInfoMap;
+}
+
+/**
+ * Filter product IDs to only include Active products
+ * Returns array of product GIDs that are Active
+ */
+export function filterActiveProducts(
+  productInfo: Map<string, ProductInfo>
+): string[] {
+  const activeIds: string[] = [];
+
+  for (const [id, info] of productInfo) {
+    if (info.status === "ACTIVE") {
+      activeIds.push(id);
+    } else {
+      console.log("[Metafield Sync] Filtering out non-Active product:", id, "status:", info.status);
+    }
+  }
+
+  return activeIds;
 }
 
 /**

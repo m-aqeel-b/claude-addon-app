@@ -8,7 +8,7 @@ import { createBundle, bundleTitleExists, getBundle } from "../models/bundle.ser
 import { createAddOnSet, setVariantsForSet } from "../models/addOnSet.server";
 import { getOrCreateWidgetStyle, updateWidgetStyle } from "../models/widgetStyle.server";
 import { addTargetedItem } from "../models/targeting.server";
-import { buildWidgetConfig, syncShopMetafields, syncProductMetafields } from "../services/metafield.sync";
+import { buildWidgetConfig, syncShopMetafields, syncProductMetafields, fetchProductInfo } from "../services/metafield.sync";
 import { activateBundleDiscount } from "../services/discount.sync";
 import type {
   BundleStatus,
@@ -265,7 +265,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           const { getAddOnSets } = await import("../models/addOnSet.server");
           const dbAddOnSets = await getAddOnSets(bundle.id);
 
-          const widgetConfig = buildWidgetConfig(fullBundle, dbAddOnSets, updatedWidgetStyle);
+          // Fetch product info (handles and status) for filtering and pricing
+          const productIds = dbAddOnSets.map((addOn) => addOn.shopifyProductId);
+          const productInfo = await fetchProductInfo(admin, productIds);
+
+          // Create handles map for backwards compatibility
+          const productHandles = new Map<string, string>();
+          for (const [id, info] of productInfo) {
+            productHandles.set(id, info.handle);
+          }
+
+          const widgetConfig = buildWidgetConfig(fullBundle, dbAddOnSets, updatedWidgetStyle, productHandles, productInfo);
 
           // Get shop GID
           const shopResponse = await admin.graphql(`query { shop { id } }`);
@@ -377,7 +387,11 @@ export default function NewBundle() {
       type: "product",
       multiple: false,
       selectionIds: [],
-      filter: { variants: true },
+      filter: {
+        variants: true,
+        draft: false, // Only show Active products - exclude Draft
+        archived: false, // Exclude Archived products
+      },
     });
 
     if (selected && selected.length > 0) {
@@ -437,7 +451,11 @@ export default function NewBundle() {
       type: "product",
       multiple: false,
       selectionIds: [{ id: productId, variants: currentVariantIds.map(id => ({ id })) }],
-      filter: { variants: true },
+      filter: {
+        variants: true,
+        draft: false, // Only show Active products
+        archived: false, // Exclude Archived products
+      },
     });
 
     if (selected && selected.length > 0) {

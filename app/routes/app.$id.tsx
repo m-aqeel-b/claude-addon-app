@@ -20,7 +20,7 @@ import {
   syncProductMetafields,
   clearShopMetafield,
   clearProductMetafields,
-  fetchProductHandles,
+  fetchProductInfo,
 } from "../services/metafield.sync";
 import {
   activateBundleDiscount,
@@ -176,13 +176,20 @@ async function syncBundleMetafields(
       return;
     }
 
-    // Fetch product handles for market-specific pricing in the widget
+    // Fetch product info (handles and status) for market-specific pricing and filtering
     const productIds = addOnSets.map((addOn) => addOn.shopifyProductId);
-    const productHandles = await fetchProductHandles(admin, productIds);
-    console.log("[syncBundleMetafields] Fetched", productHandles.size, "product handles for dynamic pricing");
+    const productInfo = await fetchProductInfo(admin, productIds);
+    console.log("[syncBundleMetafields] Fetched info for", productInfo.size, "products");
 
-    const widgetConfig = buildWidgetConfig(bundle, addOnSets, widgetStyle, productHandles);
-    console.log("[syncBundleMetafields] Built widget config with", widgetConfig.addOns.length, "add-ons");
+    // Build widget config - this will filter out Draft/Unlisted products for the storefront
+    // Create handles map for backwards compatibility
+    const productHandles = new Map<string, string>();
+    for (const [id, info] of productInfo) {
+      productHandles.set(id, info.handle);
+    }
+
+    const widgetConfig = buildWidgetConfig(bundle, addOnSets, widgetStyle, productHandles, productInfo);
+    console.log("[syncBundleMetafields] Built widget config with", widgetConfig.addOns.length, "add-ons (filtered for Active products)");
 
     // Sync WIDGET config to shop/product metafields (for theme display)
     if (bundle.targetingType === "ALL_PRODUCTS") {
@@ -233,7 +240,7 @@ async function syncBundleMetafields(
 }
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
   const bundleId = params.id!;
 
@@ -248,15 +255,24 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     getTargetedItems(bundleId),
   ]);
 
-  // Convert Decimal fields to numbers for proper JSON serialization
-  const addOnSets = addOnSetsRaw.map(addOn => ({
-    ...addOn,
-    discountValue: addOn.discountValue ? Number(addOn.discountValue) : null,
-    selectedVariants: addOn.selectedVariants.map(v => ({
-      ...v,
-      variantPrice: v.variantPrice ? Number(v.variantPrice) : null,
-    })),
-  }));
+  // Fetch product statuses from Shopify for admin UI display
+  const productIds = addOnSetsRaw.map((addOn) => addOn.shopifyProductId);
+  const productInfo = productIds.length > 0 ? await fetchProductInfo(admin, productIds) : new Map();
+
+  // Convert Decimal fields to numbers and add product status for admin display
+  const addOnSets = addOnSetsRaw.map(addOn => {
+    const info = productInfo.get(addOn.shopifyProductId);
+    return {
+      ...addOn,
+      discountValue: addOn.discountValue ? Number(addOn.discountValue) : null,
+      selectedVariants: addOn.selectedVariants.map(v => ({
+        ...v,
+        variantPrice: v.variantPrice ? Number(v.variantPrice) : null,
+      })),
+      // Product status for admin UI display (ACTIVE, DRAFT, ARCHIVED)
+      productStatus: info?.status || "UNKNOWN",
+    };
+  });
 
   return { bundle, addOnSets, widgetStyle, targetedItems };
 };
@@ -890,6 +906,7 @@ interface LocalAddOnSet {
   }>;
   isNew?: boolean; // Track if this is a new item not yet saved
   isModified?: boolean; // Track if this item has been modified
+  productStatus?: string; // Shopify product status: ACTIVE, DRAFT, ARCHIVED
 }
 
 export default function EditBundle() {
@@ -937,6 +954,8 @@ export default function EditBundle() {
         variantSku: v.variantSku,
         variantPrice: v.variantPrice ? Number(v.variantPrice) : null,
       })),
+      // Product status from Shopify (ACTIVE, DRAFT, ARCHIVED)
+      productStatus: (addOn as Record<string, unknown>).productStatus as string | undefined,
     }))
   );
   const [deletedAddOnSetIds, setDeletedAddOnSetIds] = useState<string[]>([]);
@@ -1178,7 +1197,11 @@ export default function EditBundle() {
       type: "product",
       multiple: false,
       selectionIds: [],
-      filter: { variants: true }, // Enable variant selection in the picker
+      filter: {
+        variants: true, // Enable variant selection in the picker
+        draft: false, // Exclude draft products - only show Active products
+        archived: false, // Exclude archived products
+      },
     });
     if (selected && selected.length > 0) {
       const product = selected[0] as {
@@ -1237,7 +1260,11 @@ export default function EditBundle() {
       type: "product",
       multiple: false,
       selectionIds: [{ id: productId, variants: currentVariantIds.map(id => ({ id })) }],
-      filter: { variants: true },
+      filter: {
+        variants: true,
+        draft: false, // Exclude draft products
+        archived: false, // Exclude archived products
+      },
     });
 
     if (selected && selected.length > 0) {
@@ -2869,10 +2896,22 @@ function AddOnSetCard({ addOn, isUnsaved, onDelete, onUpdate, onEditVariants }: 
 
           {/* Product Title and Discount Info */}
           <div style={{ flex: 1 }}>
-            <s-text variant="headingSm">{addOn.productTitle || "Untitled product"}</s-text>
-            <div style={{ marginTop: "4px", display: "flex", gap: "8px", alignItems: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <s-text variant="headingSm">{addOn.productTitle || "Untitled product"}</s-text>
+              {/* Product Status Badge - shows when product is not Active */}
+              {addOn.productStatus && addOn.productStatus !== "ACTIVE" && (
+                <s-badge tone="warning">
+                  {addOn.productStatus === "DRAFT" ? "Draft" : addOn.productStatus === "ARCHIVED" ? "Archived" : addOn.productStatus}
+                </s-badge>
+              )}
+            </div>
+            <div style={{ marginTop: "4px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
               <span style={discountBadgeStyle}>{getDiscountText()}</span>
               {isUnsaved && <s-badge tone="warning">Unsaved</s-badge>}
+              {/* Warning for non-Active products */}
+              {addOn.productStatus && addOn.productStatus !== "ACTIVE" && (
+                <s-text variant="bodySm" tone="subdued">Not visible on storefront</s-text>
+              )}
             </div>
           </div>
 

@@ -12,6 +12,32 @@
 {% endcomment %}
 
 {% liquid
+  comment
+    ============================================================================
+    PRODUCT STATUS CHECK
+    Skip rendering for products that are Draft or Unlisted.
+    On the storefront, Draft/Unlisted products are not accessible via all_products
+    so they will return nil/blank. This ensures only Active products are shown.
+    ============================================================================
+  endcomment
+  assign addon_product_check = all_products[addon.productHandle]
+  assign product_is_accessible = false
+
+  if addon_product_check != blank and addon_product_check != nil
+    comment
+      Product exists and is accessible (Active status)
+      Additional check: product must be published to Online Store
+    endcomment
+    if addon_product_check.published_at != blank
+      assign product_is_accessible = true
+    endif
+  endif
+%}
+
+{% comment %} Only render if product is accessible (Active and published) {% endcomment %}
+{% if product_is_accessible %}
+
+{% liquid
   assign is_free_gift = false
   if addon.discountType == 'FREE_GIFT'
     assign is_free_gift = true
@@ -337,3 +363,6 @@
     </span>
   </label>
 </div>
+
+{% endif %}
+{% comment %} End product_is_accessible check {% endcomment %}
